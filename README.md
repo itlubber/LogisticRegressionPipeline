@@ -1,0 +1,2 @@
+# LogisticRegressionPipeline
+分别基于statsmodels和scikit-learn实现两种可用于sklearn pipeline的 LogisticRegression，并输出相应的报告
