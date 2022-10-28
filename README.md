@@ -71,3 +71,11 @@ feature_pipeline.named_steps['logistic'].summary_save()
 print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
 print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
 ```
+
+
+## 参考
+
+> https://github.com/ing-bank/skorecard/blob/main/skorecard/linear_model/linear_model.py
+> 
+> https://github.com/itlubber/openpyxl-excel-style-template/blob/main/pipeline_model.py
+> 
