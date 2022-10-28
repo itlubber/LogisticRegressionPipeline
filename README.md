@@ -1,4 +1,4 @@
-# ITLubberLogisticRegression: 可用于超参数搜索&pipeline的逻辑回归模型
+# 可用于 `超参数搜索` & `pipeline` 的逻辑回归
 
 ## 概述
 
