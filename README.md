@@ -4,7 +4,7 @@
 
 分别基于 `statsmodels` 和 `scikit-learn` 实现两种可用于 `sklearn pipeline` 的 `LogisticRegression`，并输出相应的报告，效果如下：
 
-> 基于 `statsmodels` 的 `LogisticClassifier`
+> 基于 `statsmodels` 的 `StatsLogisticRegression`
 
 
 <img src="https://itlubber.art/upload/2022/10/iShot_2022-10-28_13.21.00.png"></img>
@@ -33,7 +33,7 @@ feature_pipeline = Pipeline([
     ("transform", WOETransformer(target=target)),
     ("processing_select", FeatureSelection(target=target, engine="scorecardpy")),
     ("stepwise", StepwiseSelection(target=target)),
-    ("logistic", LogisticClassifier(target=target)),
+    ("logistic", StatsLogisticRegression(target=target)),
     # ("logistic", ITLubberLogisticRegression(target=target)),
 ])
 
@@ -42,7 +42,7 @@ feature_pipeline.fit(train)
 y_pred_train = feature_pipeline.predict(train.drop(columns=target))
 y_pred_test = feature_pipeline.predict(test.drop(columns=target))
 
-# LogisticClassifier 参数搜索
+# StatsLogisticRegression 参数搜索
 params_grid = {
     "logistic__intercept": [True, False],
 }
