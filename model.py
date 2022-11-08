@@ -5,21 +5,19 @@ import numpy as np
 import pandas as pd
 import scorecardpy as sc
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
 
 import scipy
-import plotly.graph_objects as go
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
 
 
