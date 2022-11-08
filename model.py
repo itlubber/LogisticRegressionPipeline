@@ -1,4 +1,5 @@
 import os
+import toad
 import warnings
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ from sklearn.model_selection import train_test_split
 
 import scipy
 import plotly.graph_objects as go
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -27,7 +29,7 @@ plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
 plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
-class LogisticClassifier(TransformerMixin, BaseEstimator):
+class StatsLogisticRegression(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", intercept=True, ):
         self.intercept = intercept
@@ -127,14 +129,15 @@ class LogisticClassifier(TransformerMixin, BaseEstimator):
             workbook.close()
         
         try:
-            from feature_bins import render_excel # From: https://github.com/itlubber/openpyxl-excel-style-template/blob/main/feature_bins.py
+            from processing import render_excel # From: https://github.com/itlubber/openpyxl-excel-style-template/blob/main/feature_bins.py
             render_excel(excel_name, sheet_name=sheet_name, max_column_width=25, merge_rows=np.cumsum([1, len(summary_report), 2, len(coef_report) + 1, 2, len(corr_report) + 1]).tolist())
         except:
             pass
 
 
 class ITLubberLogisticRegression(LogisticRegression):
-    """Extended Logistic Regression.
+    """
+    Extended Logistic Regression.
     Extends [sklearn.linear_model.LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html).
     This class provides the following extra statistics, calculated on `.fit()` and accessible via `.summary()`:
     - `cov_matrix_`: covariance matrix for the estimated parameters.
@@ -144,21 +147,29 @@ class ITLubberLogisticRegression(LogisticRegression):
     - `z_coef_`: estimated z-statistic for the coefficients
     - `p_value_intercept_`: estimated p-value for the intercept
     - `p_value_coef_`: estimated p-value for the coefficients
+    
     Example:
     ```python
-    # pipeline
-    pipeline = Pipeline([
-        ('clf', LogisticRegression(calculate_stats=True))
+    feature_pipeline = Pipeline([
+        ("preprocessing_select", FeatureSelection(target=target, engine="scorecardpy")),
+        ("combiner", Combiner(target=target, min_samples=0.2)),
+        ("transform", WOETransformer(target=target)),
+        ("processing_select", FeatureSelection(target=target, engine="scorecardpy")),
+        ("stepwise", StepwiseSelection(target=target)),
+        # ("logistic", LogisticClassifier(target=target)),
+        ("logistic", ITLubberLogisticRegression(target=target)),
     ])
-    pipeline.fit(X, y)
-    pipeline.named_steps['clf'].summary()
+    
+    feature_pipeline.fit(train)
+    summary = feature_pipeline.named_steps['logistic'].summary()
     ```
+    
     An example output of `.summary()`:
     
-    Index     | Coef.     | Std.Err  |   z       | Pz
-    --------- | ----------| ---------| ----------| ------------
-    const     | -0.537571 | 0.096108 | -5.593394 | 2.226735e-08
-    EDUCATION | 0.010091  | 0.044874 | 0.224876  | 8.220757e-01
+    |                   |     Coef. |   Std.Err |        z |       P>|z| |    [ 0.025 |   0.975 ] |     VIF |
+    |:------------------|----------:|----------:|---------:|------------:|-----------:|----------:|--------:|
+    | const             | -0.844037 | 0.0965117 | -8.74544 | 2.22148e-18 | -1.0332    | -0.654874 | 1.05318 |
+    | duration.in.month |  0.847445 | 0.248873  |  3.40513 | 0.000661323 |  0.359654  |  1.33524  | 1.14522 |
     """
 
     def __init__(self, target="target", penalty="l2", calculate_stats=True, dual=False, tol=0.0001, C=1.0, fit_intercept=True, intercept_scaling=1, class_weight=None, random_state=None, solver="lbfgs", max_iter=100, multi_class="auto", verbose=0, warm_start=False, n_jobs=None, l1_ratio=None,):
@@ -179,6 +190,7 @@ class ITLubberLogisticRegression(LogisticRegression):
             return super().fit(x, y, sample_weight=sample_weight, **kwargs)
 
         x = self.convert_sparse_matrix(x)
+        
         if isinstance(x, pd.DataFrame):
             self.names_ = ["const"] + [f for f in x.columns]
         else:
@@ -194,6 +206,7 @@ class ITLubberLogisticRegression(LogisticRegression):
         else:
             x_design = x
 
+        self.vif = [variance_inflation_factor(np.matrix(x_design), i) for i in range(x_design.shape[-1])]
         p = np.product(predProbs, axis=1)
         self.cov_matrix_ = np.linalg.inv((x_design * p[..., np.newaxis]).T @ x_design)
         std_err = np.sqrt(np.diag(self.cov_matrix_)).reshape(1, -1)
@@ -249,6 +262,8 @@ class ITLubberLogisticRegression(LogisticRegression):
         stats = pd.DataFrame(data, index=self.names_)
         stats["[ 0.025"] = stats["Coef."] - 1.96 * stats["Std.Err"]
         stats["0.975 ]"] = stats["Coef."] + 1.96 * stats["Std.Err"]
+        
+        stats["VIF"] = self.vif
         
         return stats
     
@@ -323,10 +338,88 @@ class ITLubberLogisticRegression(LogisticRegression):
         return fig
     
     
+class ScoreCard(TransformerMixin, BaseEstimator, ClassifierMixin):
+    
+    def __init__(self, target="target", pdo=60, rate=2, base_odds=35, base_score=750, combiner={}, transer=None, penalty='l2', C=1.0, fit_intercept=True, class_weight="balanced", random_state=None, 
+                 solver="lbfgs", max_iter=100, verbose=0, warm_start=False, n_jobs=None, l1_ratio=None, pretrain_lr=None):
+        self.target = target
+        self.combiner = combiner
+        self.transer = transer
+        self.base_score = base_score
+        self.base_odds = base_odds
+        self.rate = rate
+        self.pdo = pdo
+        self.penalty = penalty
+        self.C = C
+        self.fit_intercept = fit_intercept
+        self.class_weight = class_weight
+        self.random_state = random_state
+        self.solver = solver
+        self.max_iter = max_iter
+        self.verbose = verbose
+        self.warm_start = warm_start
+        self.n_jobs = n_jobs
+        self.l1_ratio = l1_ratio
+        self.card = toad.ScoreCard(combiner=self.combiner, transer=self.transer, pdo=self.pdo, rate=self.rate, base_odds=self.base_odds, base_score=self.base_score, penalty=self.penalty, C=self.C, 
+                                   fit_intercept=self.fit_intercept, class_weight=self.class_weight, random_state=self.random_state, solver=self.solver, max_iter=self.max_iter, verbose=self.verbose, 
+                                   warm_start=self.warm_start, n_jobs=self.n_jobs, l1_ratio=self.l1_ratio, )
+        if pretrain_lr:
+            self.card.model = pretrain_lr
+        
+    def fit(self, x, y=None):
+        self.classes_ = x[self.target].unique()
+        self.card.fit(x.drop(columns=[self.target]), x[self.target])
+        return self
+    
+    def transform(self, x):
+        return self.card.predict(x)
+    
+    def predict(self, x):
+        return self.card.predict(x)
+    
+    def export(self):
+        return self.card.export()
+    
+    def KS_bucket(self, y_pred, y_true, bucket=10, method="quantile"):
+        return toad.metrics.KS_bucket(y_pred, y_true, bucket=bucket, method=method)
+    
+    def KS(self, y_pred, y_true):
+        return toad.metrics.KS(y_pred, y_true)
+    
+    def AUC(self, y_pred, y_true):
+        return toad.metrics.AUC(y_pred, y_true)
+    
+    def perf_eva(self, y_pred, y_true, title="", plot_type=["ks", "roc"]):
+        return sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type)
+    
+    def PSI(self, y_pred_train, y_pred_oot):
+        return toad.metrics.PSI(y_pred_train, y_pred_oot)
+    
+    def perf_psi(self, y_pred_train, y_pred_oot, y_true_train, y_true_oot, keys=["train", "test"], x_limits=None, x_tick_break=50, show_plot=True, return_distr_dat=False):
+        return sc.perf_psi(
+            score = {keys[0]: y_pred_train, keys[1]: y_pred_oot},
+            label = {keys[0]: y_true_train, keys[1]: y_true_oot},
+            x_limits = x_limits,
+            x_tick_break = x_tick_break,
+            show_plot = show_plot,
+            return_distr_dat = return_distr_dat,
+        )
+    
+    def score_hist(self, score, y_true, figsize=(15, 10), bins=20, alpha=0.6):
+        mask = y_true == 0
+        fig = plt.figure(figsize=figsize)
+        plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
+        plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
+        plt.xlabel("score")
+        plt.legend()
+        plt.show()
+        
+        return fig
+    
+    
 if __name__ == '__main__':
-    import toad
     # https://github.com/itlubber/openpyxl-excel-style-template/blob/main/pipeline_model.py
-    from pipeline_model import FeatureSelection, Combiner, WOETransformer, StepwiseSelection
+    from processing import FeatureSelection, Combiner, WOETransformer, StepwiseSelection
     
     target = "creditability"
     data = sc.germancredit()
@@ -339,7 +432,7 @@ if __name__ == '__main__':
         ("transform", WOETransformer(target=target)),
         ("processing_select", FeatureSelection(target=target, engine="scorecardpy")),
         ("stepwise", StepwiseSelection(target=target)),
-        ("logistic", LogisticClassifier(target=target)),
+        # ("logistic", StatsLogisticRegression(target=target)),
         # ("logistic", ITLubberLogisticRegression(target=target)),
     ])
     
@@ -365,8 +458,10 @@ if __name__ == '__main__':
     # print(clf.best_params_)
     
     # model summary
-    feature_pipeline.named_steps['logistic'].summary_save()
-    # feature_pipeline.named_steps['logistic'].summary()
+    # feature_pipeline.named_steps['logistic'].summary_save()
+    print(feature_pipeline.named_steps['logistic'].summary())
+    
+    import pdb; pdb.set_trace()
     
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
