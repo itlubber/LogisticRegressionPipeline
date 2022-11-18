@@ -11,6 +11,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import scorecardpy as sc
+from optbinning import OptimalBinning
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from openpyxl import load_workbook
@@ -21,6 +22,7 @@ import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
@@ -243,6 +245,10 @@ class ITLubberLogisticRegression(LogisticRegression):
 
         return self
 
+    @staticmethod
+    def report(woe_train):
+        pd.DataFrame(classification_report(train[target], logistic.predict(woe_train.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
+
     def summary(self):
         """
         Puts the summary statistics of the fit() function into a pandas DataFrame.
@@ -343,64 +349,72 @@ class ITLubberLogisticRegression(LogisticRegression):
         return fig
     
     
-class ScoreCard(TransformerMixin, BaseEstimator, ClassifierMixin):
+class ScoreCard(toad.ScoreCard, TransformerMixin):
     
-    def __init__(self, target="target", pdo=60, rate=2, base_odds=35, base_score=750, combiner={}, transer=None, penalty='l2', C=1.0, fit_intercept=True, class_weight="balanced", random_state=None, 
-                 solver="lbfgs", max_iter=100, verbose=0, warm_start=False, n_jobs=None, l1_ratio=None, pretrain_lr=None):
-        self.target = target
-        self.combiner = combiner
-        self.transer = transer
-        self.base_score = base_score
-        self.base_odds = base_odds
-        self.rate = rate
-        self.pdo = pdo
-        self.penalty = penalty
-        self.C = C
-        self.fit_intercept = fit_intercept
-        self.class_weight = class_weight
-        self.random_state = random_state
-        self.solver = solver
-        self.max_iter = max_iter
-        self.verbose = verbose
-        self.warm_start = warm_start
-        self.n_jobs = n_jobs
-        self.l1_ratio = l1_ratio
-        self.card = toad.ScoreCard(combiner=self.combiner, transer=self.transer, pdo=self.pdo, rate=self.rate, base_odds=self.base_odds, base_score=self.base_score, penalty=self.penalty, C=self.C, 
-                                   fit_intercept=self.fit_intercept, class_weight=self.class_weight, random_state=self.random_state, solver=self.solver, max_iter=self.max_iter, verbose=self.verbose, 
-                                   warm_start=self.warm_start, n_jobs=self.n_jobs, l1_ratio=self.l1_ratio, )
-        if pretrain_lr:
-            self.card.model = pretrain_lr
+    def __init__(self, target="target", pdo=60, rate=2, base_odds=35, base_score=750, combiner={}, transer=None, pretrain_lr=None, pipeline=None, **kwargs):
+        if pipeline:
+            combiner = self.class_steps(pipeline, Combiner)[0]
+            transer = self.class_steps(pipeline, WOETransformer)[0]
+            
+            if self.class_steps(pipeline, (ITLubberLogisticRegression, LogisticRegression)):
+                pretrain_lr = self.class_steps(pipeline, (ITLubberLogisticRegression, LogisticRegression))[0]
+            
+        super().__init__(
+                            combiner=combiner.combiner if isinstance(combiner, Combiner) else combiner, transer=transer.transformer if isinstance(transer, WOETransformer) else transer, 
+                            pdo=pdo, rate=rate, base_odds=base_odds, base_score=base_score, **kwargs
+                        )
         
-    def fit(self, x, y=None):
-        self.classes_ = x[self.target].unique()
-        self.card.fit(x.drop(columns=[self.target]), x[self.target])
+        self.target = target
+        self.pipeline = pipeline
+        self.pretrain_lr = pretrain_lr
+        
+    def fit(self, x):
+        y = x[self.target]
+        x = x.drop(columns=[self.target])
+        
+        self._feature_names = x.columns.tolist()
+
+        for f in self.features_:
+            if f not in self.transer:
+                raise Exception('column \'{f}\' is not in transer'.format(f = f))
+
+        if self.pretrain_lr:
+            self.model = self.pretrain_lr
+        else:
+            self.model.fit(x, y)
+        
+        self.rules = self._generate_rules()
+
+        sub_score = self.woe_to_score(x)
+        self.base_effect = pd.Series(np.median(sub_score, axis=0), index = self.features_)
+
         return self
     
     def transform(self, x):
-        return self.card.predict(x)
+        return self.predict(x)
     
-    def predict(self, x):
-        return self.card.predict(x)
-    
-    def export(self):
-        return self.card.export()
-    
-    def KS_bucket(self, y_pred, y_true, bucket=10, method="quantile"):
+    @staticmethod
+    def KS_bucket(y_pred, y_true, bucket=10, method="quantile"):
         return toad.metrics.KS_bucket(y_pred, y_true, bucket=bucket, method=method)
     
-    def KS(self, y_pred, y_true):
+    @staticmethod
+    def KS(y_pred, y_true):
         return toad.metrics.KS(y_pred, y_true)
     
-    def AUC(self, y_pred, y_true):
+    @staticmethod
+    def AUC(y_pred, y_true):
         return toad.metrics.AUC(y_pred, y_true)
     
-    def perf_eva(self, y_pred, y_true, title="", plot_type=["ks", "roc"]):
+    @staticmethod
+    def perf_eva(y_pred, y_true, title="", plot_type=["ks", "roc"]):
         return sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type)
     
-    def PSI(self, y_pred_train, y_pred_oot):
+    @staticmethod
+    def PSI(y_pred_train, y_pred_oot):
         return toad.metrics.PSI(y_pred_train, y_pred_oot)
     
-    def perf_psi(self, y_pred_train, y_pred_oot, y_true_train, y_true_oot, keys=["train", "test"], x_limits=None, x_tick_break=50, show_plot=True, return_distr_dat=False):
+    @staticmethod
+    def perf_psi(y_pred_train, y_pred_oot, y_true_train, y_true_oot, keys=["train", "test"], x_limits=None, x_tick_break=50, show_plot=True, return_distr_dat=False):
         return sc.perf_psi(
             score = {keys[0]: y_pred_train, keys[1]: y_pred_oot},
             label = {keys[0]: y_true_train, keys[1]: y_true_oot},
@@ -410,16 +424,100 @@ class ScoreCard(TransformerMixin, BaseEstimator, ClassifierMixin):
             return_distr_dat = return_distr_dat,
         )
     
-    def score_hist(self, score, y_true, figsize=(15, 10), bins=20, alpha=0.6):
+    @staticmethod
+    def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=0.6):
         mask = y_true == 0
         fig = plt.figure(figsize=figsize)
         plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
         plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
         plt.xlabel("score")
         plt.legend()
-        plt.show()
+        # plt.show()
         
         return fig
+    
+    @staticmethod
+    def class_steps(pipeline, query):
+        return [v for k, v in pipeline.named_steps.items() if isinstance(v, query)]
+    
+    @staticmethod
+    def format_bins(bins):
+        if isinstance(bins, list): bins = np.array(bins)
+        EMPTYBINS = len(bins) if not isinstance(bins[0], (set, list, np.ndarray)) else -1
+        
+        l = []
+        if np.issubdtype(bins.dtype, np.number):
+            has_empty = len(bins) > 0 and np.isnan(bins[-1])
+            if has_empty: bins = bins[:-1]
+            sp_l = ["负无穷"] + bins.tolist() + ["正无穷"]
+            for i in range(len(sp_l) - 1): l.append('['+str(sp_l[i])+' , '+str(sp_l[i+1])+')')
+            if has_empty: l.append('缺失值')
+        else:
+            for keys in bins:
+                keys_update = set()
+                for key in keys:
+                    if pd.isnull(key) or key == "nan":
+                        keys_update.add("缺失值")
+                    elif key.strip() == "":
+                        keys_update.add("空字符串")
+                    else:
+                        keys_update.add(key)
+                label = ','.join(keys_update)
+                l.append(label)
+
+        return {i if b != "缺失值" else EMPTYBINS: b for i, b in enumerate(l)}
+    
+    @staticmethod
+    def feature_bin_stats(data, feature, target="target", rules={}, empty_separate=True, method='step', max_n_bins=10, clip_v=None, desc="评分卡分数", verbose=0):
+        if method not in ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']:
+            raise "method is the one of ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']"
+        
+        combiner = toad.transform.Combiner()
+        
+        if method == "cart":
+            x = data[feature].values
+            y = data[target]
+            _combiner = OptimalBinning(feature, dtype="numerical", max_n_bins=max_n_bins, monotonic_trend="auto_asc_desc", gamma=0.01).fit(x, y)
+            if _combiner.status == "OPTIMAL":
+                rules.update({feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [np.nan]})
+        else:
+            combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins, clip_v=clip_v)
+
+        if verbose > 0:
+            print(data[feature].describe())
+
+        if rules and isinstance(rules, list): rules = {feature: rules}
+        if rules and isinstance(rules, dict): combiner.update(rules)
+
+        feature_bin = combiner.export()[feature]
+        feature_bin_dict = self.format_bins(np.array(feature_bin))
+        
+        df_bin = combiner.transform(data[[feature, target]], labels=False)
+        
+        table = df_bin[[feature, target]].groupby([feature, target]).agg(len).unstack()
+        table.columns.name = None
+        table = table.rename(columns = {0 : '好样本数', 1 : '坏样本数'}).fillna(0)
+        table["指标名称"] = feature
+        table["指标含义"] = desc
+        table = table.reset_index().rename(columns={feature: "分箱"})
+        table["分箱"] = table["分箱"].map(feature_bin_dict)
+
+        table['样本总数'] = table['好样本数'] + table['坏样本数']
+        table['样本占比'] = table['样本总数'] / table['样本总数'].sum()
+        table['好样本占比'] = table['好样本数'] / table['好样本数'].sum()
+        table['坏样本占比'] = table['坏样本数'] / table['坏样本数'].sum()
+        table['坏样本率'] = table['坏样本数'] / table['样本总数']
+        
+        table = table.fillna(0.)
+        
+        table['分档WOE值'] = table.apply(lambda x : np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)),axis=1)
+        table['分档IV值'] = table.apply(lambda x : (x['好样本占比'] - x['坏样本占比']) * np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)), axis=1)
+        table['指标IV值'] = table['分档IV值'].sum()
+        
+        table["LIFT值"] = table['坏样本率'] / (table["坏样本数"].sum() / table["样本总数"].sum())
+        table["累积LIFT值"] = table["LIFT值"].cumsum()
+        
+        return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值']]
     
     
 if __name__ == '__main__':
@@ -429,7 +527,7 @@ if __name__ == '__main__':
     target = "creditability"
     data = sc.germancredit()
     data[target] = data[target].map({"good": 0, "bad": 1})
-    
+
     train, test = train_test_split(data, test_size=0.3, shuffle=True, stratify=data[target])
     feature_pipeline = Pipeline([
         ("preprocessing_select", FeatureSelection(target=target, engine="scorecardpy")),
@@ -437,13 +535,20 @@ if __name__ == '__main__':
         ("transform", WOETransformer(target=target)),
         ("processing_select", FeatureSelection(target=target, engine="scorecardpy")),
         ("stepwise", StepwiseSelection(target=target)),
-        # ("logistic", StatsLogisticRegression(target=target)),
-        # ("logistic", ITLubberLogisticRegression(target=target)),
     ])
-    
+
     feature_pipeline.fit(train)
-    y_pred_train = feature_pipeline.predict(train.drop(columns=target))
-    y_pred_test = feature_pipeline.predict(test.drop(columns=target))
+
+    woe_train = feature_pipeline.transform(train)
+    woe_test = feature_pipeline.transform(test)
+
+    # logistic = StatsLogisticRegression(target=target)
+    logistic = ITLubberLogisticRegression(target=target)
+    
+    logistic.fit(woe_train)
+
+    y_pred_train = logistic.predict(woe_train.drop(columns=target))
+    y_pred_test = logistic.predict(woe_test.drop(columns=target))
     
     # params_grid = {
     #     # "logistic__C": [i / 1. for i in range(1, 10, 2)],
@@ -463,10 +568,25 @@ if __name__ == '__main__':
     # print(clf.best_params_)
     
     # model summary
-    # feature_pipeline.named_steps['logistic'].summary_save()
-    print(feature_pipeline.named_steps['logistic'].summary())
-    
-    import pdb; pdb.set_trace()
+    # logistic.summary_save()
+    print(logistic.summary())
     
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
+
+    card = ScoreCard(target=target, pipeline=feature_pipeline, pretrain_lr=logistic)
+    card.fit(woe_train)
+    
+    train["score"] = card.predict(train)
+    test["score"] = card.predict(test)
+    
+    print(card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step"))
+    print(card.feature_bin_stats(train, "score", target=target, verbose=0, method="cart"))
+    
+    train_score_rank = card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
+    test_score_rank = card.feature_bin_stats(test, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
+    
+    writer = pd.ExcelWriter("评分卡结果验证表.xsls", engine="openpyxl")
+    train_score_rank.to_excel(writer, sheet_name="训练集评分卡排序性")
+    test_score_rank.to_excel(writer, sheet_name="测试集评分卡排序性")
+    
