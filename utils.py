@@ -37,10 +37,10 @@ except:
 
 
 def ks_score(y, y_pred):
-    return toad.KS( y_pred[:,1],y)
+    return toad.KS(y_pred[:, 1], y)
 
 
-scorer = make_scorer(ks_score, needs_proba=True)
+ks_score = make_scorer(ks_score, needs_proba=True)
 
 
 def format_bins(bins):
