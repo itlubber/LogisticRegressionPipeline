@@ -190,9 +190,12 @@ def plot_bin(binx, title="", show_iv=True, show_na=True, colors=["#2639E9", "#a2
 def cal_psi(train, test, feature, combiner=None):
     # feature_bin = combiner.export()[feature]
     # feature_bin_dict = format_bins(np.array(feature_bin))
-    
-    A = (combiner.transform(train[[feature]]).value_counts() / len(train[[feature]])).reset_index().rename(columns={feature: "分箱", 0: "A"})
-    E = (combiner.transform(test[[feature]]).value_counts() / len(test[[feature]])).reset_index().rename(columns={feature: "分箱", 0: "E"})
+    try:
+        A = (combiner.transform(train[[feature]]).value_counts() / len(train[[feature]])).reset_index().rename(columns={feature: "分箱", 0: "A"})
+        E = (combiner.transform(test[[feature]]).value_counts() / len(test[[feature]])).reset_index().rename(columns={feature: "分箱", 0: "E"})
+    except:
+        A = (combiner.transform(train[[feature]])[feature].value_counts() / len(train)).reset_index().rename(columns={"index": "分箱", feature: "A"})
+        E = (combiner.transform(test[[feature]])[feature].value_counts() / len(test)).reset_index().rename(columns={"index": "分箱", feature: "E"})
     df_psi = A.merge(E, on="分箱", how="outer").fillna(0.)
     # df_psi["分箱"] = df_psi["分箱"].map(feature_bin_dict)
     df_psi["分档PSI"] = (df_psi["A"] - df_psi["E"]) * np.log(df_psi["A"] / (df_psi["E"] + 1e-6))
