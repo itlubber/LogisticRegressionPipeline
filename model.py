@@ -247,7 +247,7 @@ class ITLubberLogisticRegression(LogisticRegression):
 
     @staticmethod
     def report(woe_train):
-        pd.DataFrame(classification_report(train[target], logistic.predict(woe_train.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
+        return pd.DataFrame(classification_report(train[target], logistic.predict(woe_train.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
 
     def summary(self):
         """
