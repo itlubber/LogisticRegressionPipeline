@@ -34,6 +34,89 @@ plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
 plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
+def drop_identical(frame, threshold = 0.95, return_drop = False, exclude = None):
+    """drop columns by identical
+    Args:
+        frame (DataFrame): dataframe that will be used
+        threshold (number): drop the features whose identical num is greater than threshold. if threshold is float, it will be use as percentage
+        return_drop (bool): if need to return features' name who has been dropped
+        exclude (array-like): list of feature names that will not be dropped
+    Returns:
+        DataFrame: selected dataframe
+        array: list of feature names that has been dropped
+    """
+    cols = frame.columns.copy()
+
+    if exclude is not None:
+        cols = cols.drop(exclude)
+
+    if threshold < 1:
+        threshold = len(frame) * threshold
+
+    drop_list = []
+    for col in cols:
+        n = frame[col].value_counts().max()
+        
+        if n > threshold:
+            drop_list.append(col)
+
+    r = frame.drop(columns = drop_list)
+
+    res = (r,)
+    if return_drop:
+        res += (np.array(drop_list),)
+
+    return toad.utils.unpack_tuple(res)
+
+
+def select(frame, target = 'target', empty = 0.9, iv = 0.02, corr = 0.7,
+            identical=0.95, return_drop = False, exclude = None):
+    """select features by rate of empty, iv and correlation
+    Args:
+        frame (DataFrame)
+        target (str): target's name in dataframe
+        empty (number): drop the features which empty num is greater than threshold. if threshold is less than `1`, it will be use as percentage
+        identical (number): drop the features which identical num is greater than threshold. if threshold is less than `1`, it will be use as percentage
+        iv (float): drop the features whose IV is less than threshold
+        corr (float): drop features that has the smallest IV in each groups which correlation is greater than threshold
+        return_drop (bool): if need to return features' name who has been dropped
+        exclude (array-like): list of feature name that will not be dropped
+    Returns:
+        DataFrame: selected dataframe
+        dict: list of dropped feature names in each step
+    """
+    empty_drop = iv_drop = corr_drop = identical_drop = None
+
+    if empty is not False:
+        frame, empty_drop = toad.selection.drop_empty(frame, threshold = empty, return_drop = True, exclude = exclude)
+        
+    if identical is not False:
+        frame, identical_drop = drop_identical(frame, threshold = identical, return_drop = True, exclude = exclude)
+
+    if iv is not False:
+        frame, iv_drop, iv_list = toad.selection.drop_iv(frame, target = target, threshold = iv, return_drop = True, return_iv = True, exclude = exclude)
+
+    if corr is not False:
+        weights = 'IV'
+
+        if iv is not False:
+            weights = iv_list
+
+        frame, corr_drop = toad.selection.drop_corr(frame, target = target, threshold = corr, by = weights, return_drop = True, exclude = exclude)
+
+    res = (frame,)
+    if return_drop:
+        d = {
+            'empty': empty_drop,
+            'identical': identical_drop,
+            'iv': iv_drop,
+            'corr': corr_drop,
+        }
+        res += (d,)
+
+    return toad.utils.unpack_tuple.unpack_tuple(res)
+
+
 class FeatureSelection(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", empty=0.95, iv=0.02, corr=0.7, exclude=None, return_drop=True, identical=0.95, remove=None, engine="scorecardpy", target_rm=False):
@@ -52,7 +135,7 @@ class FeatureSelection(TransformerMixin, BaseEstimator):
     
     def fit(self, x, y=None):
         if self.engine == "toad":
-            selected = toad.selection.select(x, target=self.target, empty=self.empty, iv=self.iv, corr=self.corr, exclude=self.exclude, return_drop=self.return_drop)
+            selected = select(x, target=self.target, empty=self.empty, identical=self.identical, iv=self.iv, corr=self.corr, exclude=self.exclude, return_drop=self.return_drop)
         else:
             selected = sc.var_filter(x, y=self.target, iv_limit=self.iv, missing_limit=self.empty, identical_limit=self.identical, var_rm=self.remove, var_kp=self.exclude, return_rm_reason=self.return_drop)
             

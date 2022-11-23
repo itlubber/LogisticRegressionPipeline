@@ -7,9 +7,11 @@
 
 import os
 import toad
+import joblib
 import warnings
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 import scorecardpy as sc
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -17,7 +19,7 @@ from optbinning import OptimalBinning
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import train_test_split
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
 from openpyxl.formatting.rule import DataBarRule
 from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
 
@@ -220,7 +222,7 @@ def itlubber_border(border, color):
         )
 
 
-def render_excel(excel_name, sheet_name=None, conditional_columns=[], freeze=None, merge_rows=[], percent_columns=[], theme_color="2639E9", conditional_color="9980FA", font="楷体", fontsize=10, max_column_width=50, header=True, start_row=0):
+def render_excel(excel_name, sheet_name=None, conditional_columns=[], freeze=None, merge_rows=[], percent_columns=[], theme_color="2639E9", conditional_color="9980FA", font="楷体", fontsize=10, max_column_width=50, header=True, start_row=0, n_jobs=4, bar=True, border=True):
     workbook = load_workbook(excel_name)
     
     if sheet_name and isinstance(sheet_name, str):
@@ -239,7 +241,7 @@ def render_excel(excel_name, sheet_name=None, conditional_columns=[], freeze=Non
         for conditional_column in conditional_columns:
             add_conditional_formatting(f"{conditional_column}", theme_color=conditional_color)
         
-        for row_index, row in enumerate(worksheet.rows, start=1):
+        def render_cell(row_index, row):
             if row_index > start_row:
                 if header and row_index == start_row + 1:
                     for col_index, cell in enumerate(row, start=1):
@@ -288,7 +290,15 @@ def render_excel(excel_name, sheet_name=None, conditional_columns=[], freeze=Non
                                     cell.border = itlubber_border(["thin", "medium", "thin"], ["FFFFFF", theme_color, "FFFFFF"])
                                 else:
                                     cell.border = itlubber_border(["thin", "thin", "thin"], ["FFFFFF", "FFFFFF", "FFFFFF"])
-                                
+        
+        if border:
+            iterrows = tqdm(enumerate(worksheet.rows, start=1), total=worksheet.max_row - 1) if bar else enumerate(worksheet.rows, start=1)
+            if n_jobs > 0:
+                joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(render_cell)(row_index, row) for row_index, row in iterrows)
+            else:
+                for row_index, row in iterrows:
+                    render_cell(row_index, row)
+        
         feature_table = pd.read_excel(
             excel_name, sheet_name=sheet_name, engine="openpyxl"
         )
@@ -359,18 +369,18 @@ if __name__ == '__main__':
     feature_table = pd.concat(tables, ignore_index=True).round(6)
     feature_table["分档WOE值"] = feature_table["分档WOE值"].fillna(np.inf)
     
+    workbook = load_workbook(output_excel_name) if os.path.exists(output_excel_name) else None
     writer = pd.ExcelWriter(output_excel_name, engine="openpyxl")
     
-    if os.path.exists(output_excel_name):
-        workbook = load_workbook(output_excel_name)
+    if workbook:
         writer.book = workbook
         writer.sheets = {ws.title: ws for ws in workbook.worksheets}
+        start_row = writer.book.get_sheet_by_name(output_sheet_name).max_row 
+    else:
+        start_row = 0
         
-    start_row = workbook.get_sheet_by_name(output_sheet_name).max_row
-    feature_table.to_excel(output_excel_name, sheet_name=output_sheet_name, index=False, header=True, startcol=0, startrow=start_row)
+    feature_table.to_excel(writer, sheet_name=output_sheet_name, index=False, header=True, startcol=0, startrow=start_row)
     
-    workbook.save(output_excel_name)
-    workbook.close()
     writer.close()
     
     render_excel(output_excel_name, sheet_name=output_sheet_name, conditional_columns=["J", "N"], freeze="D2", merge_rows=merge_row_number, percent_columns=[5, 7, 9, 10], start_row=start_row, header=False if start_row > 0 else True)

@@ -467,8 +467,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
 
         return {i if b != "缺失值" else EMPTYBINS: b for i, b in enumerate(l)}
     
-    @staticmethod
-    def feature_bin_stats(data, feature, target="target", rules={}, empty_separate=True, method='step', max_n_bins=10, clip_v=None, desc="评分卡分数", verbose=0):
+    def feature_bin_stats(self, data, feature, target="target", rules={}, empty_separate=True, method='step', max_n_bins=10, clip_v=None, desc="评分卡分数", verbose=0):
         if method not in ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']:
             raise "method is the one of ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']"
         
@@ -586,7 +585,10 @@ if __name__ == '__main__':
     train_score_rank = card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     test_score_rank = card.feature_bin_stats(test, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     
-    writer = pd.ExcelWriter("评分卡结果验证表.xsls", engine="openpyxl")
+    writer = pd.ExcelWriter("评分卡结果验证表.xlsx", engine="openpyxl")
+    
     train_score_rank.to_excel(writer, sheet_name="训练集评分卡排序性")
     test_score_rank.to_excel(writer, sheet_name="测试集评分卡排序性")
+    
+    writer.close()
     
