@@ -14,8 +14,8 @@ import scorecardpy as sc
 from optbinning import OptimalBinning
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
-import plotly.graph_objects as go
-from plotly.io import write_image
+# import plotly.graph_objects as go
+# from plotly.io import write_image
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill
 
@@ -296,64 +296,93 @@ class ITLubberLogisticRegression(LogisticRegression):
             return x.toarray()
         else:
             return x
-
-    def plot_weights(self, save=None):
-        """
-        Generates a weight plot(plotly chart) from `stats`
-        Example:
-        ```
-        pipeline = Pipeline([
-            ('clf', LogisticRegression(calculate_stats=True))
-        ])
-        pipeline.fit(X, y)
-        stats = pipeline.named_steps['clf'].plot_weights()
-        ```
-        Args:
-            stats: The statistics to display
-            format: The format of the image, such as 'png'. The default None returns a plotly image.
-            scale: If format is specified, the scale of the image
-            width: If format is specified, the width of the image
-            height: If format is specified, the image of the image
-        """
-        stats = self.summary()
+    
+    def plot_weights(self, save=None, figsize=(15, 8), fontsize=14, color=["#2639E9", "#F76E6C", "#FE7715"]):
+        summary = self.summary()
         
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=stats['Coef.'],
-                y=stats['Coef.'].index,
-                line=dict(color='#2639E9', width=2),
-                mode='markers',
-
-                error_x=dict(
-                    type='data',
-                    symmetric=False,
-                    array=stats['0.975 ]'] - stats['Coef.'],
-                    arrayminus=stats['Coef.'] - stats['[ 0.025'],
-                    color='#2639E9')
-            )
-        )
-
-        fig.add_shape(type="line",
-                    x0=0, y0=0, x1=0, y1=len(stats),
-                    line=dict(color="#a29bfe", width=3, dash='dash')
-                    )
-
-        fig.update_layout(
-            title='Regression Meta Analysis - Weight Plot',
-            xaxis_title='Weight Estimates',
-            yaxis_title='Variable',
-            xaxis_showgrid=False,
-            yaxis_showgrid=False
-        )
+        x = summary["Coef."]
+        y = summary.index
+        lower_error = summary["Coef."] - summary["[ 0.025"]
+        upper_error = summary["0.975 ]"] - summary["Coef."]
         
-        fig.update_layout(template="simple_white")
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        ax.errorbar(x, y, xerr=[lower_error, upper_error], fmt="o", ecolor=color[0], elinewidth=2, capthick=2, capsize=4, ms=6, mfc=color[0], mec=color[0])
+        ax.tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        ax.tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        ax.axvline(0, color=color[0], linestyle='--', ymax=len(y), alpha=0.5)
+        ax.spines['top'].set_color(color[0])
+        ax.spines['bottom'].set_color(color[0])
+        ax.spines['right'].set_color(color[0])
+        ax.spines['left'].set_color(color[0])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        ax.set_title("Regression Meta Analysis - Weight Plot", fontsize=fontsize, fontweight="bold")
+        ax.set_xlabel("Weight Estimates", fontsize=fontsize, weight="bold")
+        ax.set_ylabel("Variable", fontsize=fontsize, weight="bold")
         
         if save:
-            write_image(fig, save)
+            plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
 
         return fig
+
+    # def plot_weights(self, save=None):
+    #     """
+    #     Generates a weight plot(plotly chart) from `stats`
+    #     Example:
+    #     ```
+    #     pipeline = Pipeline([
+    #         ('clf', LogisticRegression(calculate_stats=True))
+    #     ])
+    #     pipeline.fit(X, y)
+    #     stats = pipeline.named_steps['clf'].plot_weights()
+    #     ```
+    #     Args:
+    #         stats: The statistics to display
+    #         format: The format of the image, such as 'png'. The default None returns a plotly image.
+    #         scale: If format is specified, the scale of the image
+    #         width: If format is specified, the width of the image
+    #         height: If format is specified, the image of the image
+    #     """
+    #     stats = self.summary()
+        
+    #     fig = go.Figure()
+
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=stats['Coef.'],
+    #             y=stats['Coef.'].index,
+    #             line=dict(color='#2639E9', width=2),
+    #             mode='markers',
+
+    #             error_x=dict(
+    #                 type='data',
+    #                 symmetric=False,
+    #                 array=stats['0.975 ]'] - stats['Coef.'],
+    #                 arrayminus=stats['Coef.'] - stats['[ 0.025'],
+    #                 color='#2639E9')
+    #         )
+    #     )
+
+    #     fig.add_shape(type="line",
+    #                 x0=0, y0=0, x1=0, y1=len(stats),
+    #                 line=dict(color="#a29bfe", width=3, dash='dash')
+    #                 )
+
+    #     fig.update_layout(
+    #         title='Regression Meta Analysis - Weight Plot',
+    #         xaxis_title='Weight Estimates',
+    #         yaxis_title='Variable',
+    #         xaxis_showgrid=False,
+    #         yaxis_showgrid=False
+    #     )
+        
+    #     fig.update_layout(template="simple_white")
+        
+    #     if save:
+    #         write_image(fig, save)
+
+    #     return fig
     
     
 class ScoreCard(toad.ScoreCard, TransformerMixin):
@@ -417,8 +446,8 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type)
     
     @staticmethod
-    def ks_plot(y_pred, target, title="", fontsize=14, figsize=(14, 6), save=None, color = ["#2639E9", "#F76E6C", "#FE7715"]):
-        fpr, tpr, thresholds = roc_curve(target, y_pred)
+    def ks_plot(score, target, title="", fontsize=14, figsize=(14, 6), save=None, color = ["#2639E9", "#F76E6C", "#FE7715"]):
+        fpr, tpr, thresholds = roc_curve(target, score)
         auc_value = auc(fpr, tpr)
         
         fig, ax = plt.subplots(1, 2, figsize = figsize)
@@ -441,14 +470,19 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         thred_value = thresholds[x]
         ax[0].axvline(thred_value, color = color[1], linestyle = ':', ymax = ks_value)
         ax[0].scatter(thred_value, ks_value, c=color[1])
-        
-        ax[0].set_title(f'KS: {ks_value:.4f}    Best KS Cut Off: {thred_value:.4f}', fontsize=fontsize)
+        # ax[0].text(thred_value, ks_value + 0.02, f"ks:{ks_value:.2f} threshold:{thred_value:.2f}", fontsize=fontsize, horizontalalignment="center")
+        ax[0].text(0.5, 0.5, f"ks:{ks_value:.2f} threshold:{thred_value:.2f}", fontsize=fontsize, horizontalalignment="center", transform=ax[0].transAxes)
+
+        # ax[0].set_title(f'KS: {ks_value:.4f}    Best KS Cut Off: {thred_value:.4f}', fontsize=fontsize)
         
         ax[0].set_xlabel("Predict Proba", fontsize=fontsize)
         # ax[0].set_ylabel('Rate')
         
         ax[0].set_xlim((0, max(thresholds[1 : ])))
         ax[0].set_ylim((0, 1))
+        
+        ax[0].yaxis.tick_left()
+        ax[0].yaxis.set_label_position("left")
         
         ax[0].legend(frameon=False, fontsize=fontsize)
         
@@ -464,7 +498,8 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         ax[1].spines['right'].set_color(color[0])
         ax[1].spines['left'].set_color(color[0])
         
-        ax[1].set_title(f'AUC: {auc_value:.4f}', fontsize=fontsize)
+        ax[1].text(0.5, 0.5, f"AUC: {auc_value:.4f}", fontsize=fontsize, horizontalalignment="center", transform=ax[1].transAxes)
+        # ax[1].set_title(f'AUC: {auc_value:.4f}', fontsize=fontsize)
 
         ax[1].set_xlabel("False Positive Rate", fontsize=fontsize)
         ax[1].set_ylabel('True Positive Rate', fontsize=fontsize)
@@ -472,11 +507,14 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         ax[1].set_xlim((0, 1))
         ax[1].set_ylim((0, 1))
         
+        ax[1].yaxis.tick_right()
+        ax[1].yaxis.set_label_position("right")
+        
         if title: title += " "
-        plt.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize)
+        plt.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize, fontweight="bold")
         
         if save:
-            plt.savefig(save, dpi=120, format="png", )
+            plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
 
         return fig
     
@@ -588,7 +626,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         table["累积LIFT值"] = table["LIFT值"].cumsum()
         
         return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值']]
-    
+
     
 if __name__ == '__main__':
     # https://github.com/itlubber/openpyxl-excel-style-template/blob/main/pipeline_model.py
@@ -693,5 +731,5 @@ if __name__ == '__main__':
     
     from utils import render_excel
     
-    render_excel("评分卡结果验证表.xlsx", border=True)
+    render_excel("评分卡结果验证表.xlsx", border=False)
     

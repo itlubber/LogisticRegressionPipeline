@@ -76,38 +76,38 @@ def feature_bin_stats(data, feature, combiner=None, target="target", rules={}, e
     # if combiner is None:
     #     combiner = toad.transform.Combiner()
     #     combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, min_samples=min_samples) 
-    
-    if data[feature].nunique(dropna=True) < 3:
-        splits = []
-        for v in data[feature].unique():
-            if not pd.isnull(v):
-                splits.append(v)
+    if feature not in rules:
+        if data[feature].nunique(dropna=True) < 3:
+            splits = []
+            for v in data[feature].unique():
+                if not pd.isnull(v):
+                    splits.append(v)
 
-        if str(data[feature].dtypes) in ["object", "string", "category"]:
-            rule = {feature: [[s] for s in splits]}
-            rule[feature].append([[np.nan]])
-        else:
-            rule = {feature: sorted(splits) + [np.nan]}
-    else:
-        try:
-            y = data[target]
             if str(data[feature].dtypes) in ["object", "string", "category"]:
-                dtype = "categorical"
-                x = data[feature].astype("category").values
+                rule = {feature: [[s] for s in splits]}
+                rule[feature].append([[np.nan]])
             else:
-                dtype = "numerical"
-                x = data[feature].values
-            _combiner = OptimalBinning(feature, dtype=dtype, max_n_bins=max_n_bins, monotonic_trend=monotonic_trend, gamma=gamma).fit(x, y)
-            if _combiner.status == "OPTIMAL":
-                rule = {feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [[np.nan] if dtype == "categorical" else np.nan]}
-            else:
-                raise "OptimalBinning error"
-        except Exception as e:
-            if method not in ["dt", "chi", ]:
-                method = "chi"
-            _combiner = toad.transform.Combiner()
-            _combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, min_samples=min_samples)
-            rule = _combiner.export()
+                rule = {feature: sorted(splits) + [np.nan]}
+        else:
+            try:
+                y = data[target]
+                if str(data[feature].dtypes) in ["object", "string", "category"]:
+                    dtype = "categorical"
+                    x = data[feature].astype("category").values
+                else:
+                    dtype = "numerical"
+                    x = data[feature].values
+                _combiner = OptimalBinning(feature, dtype=dtype, max_n_bins=max_n_bins, monotonic_trend=monotonic_trend, gamma=gamma).fit(x, y)
+                if _combiner.status == "OPTIMAL":
+                    rule = {feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [[np.nan] if dtype == "categorical" else np.nan]}
+                else:
+                    raise "OptimalBinning error"
+            except Exception as e:
+                if method not in ["dt", "chi", ]:
+                    method = "chi"
+                _combiner = toad.transform.Combiner()
+                _combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, min_samples=min_samples)
+                rule = _combiner.export()
 
     if combiner is None:
         combiner = toad.transform.Combiner()
@@ -376,7 +376,6 @@ if __name__ == '__main__':
     #     merge_row_number.append(len(table))
     #     tables[feature] = table
     
-    # import pdb; pdb.set_trace()
     for feature in cols:
         table = feature_bin_stats(train, feature, feature_dict=feature_dict, rules={}, combiner=combiner)
         print(train.shape)
