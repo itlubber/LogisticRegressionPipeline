@@ -75,9 +75,9 @@ def format_bins(bins):
 def feature_bin_stats(data, feature, combiner=None, target="target", rules={}, empty_separate=True, method='cart', min_samples=0.15, max_n_bins=3, gamma=0.01, monotonic_trend="auto_asc_desc", feature_dict={}):
     # if combiner is None:
     #     combiner = toad.transform.Combiner()
-    #     combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, min_samples=min_samples)
-
-    if len(set(data[feature].unique().tolist() + [np.nan])) < 4:
+    #     combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, min_samples=min_samples) 
+    
+    if data[feature].nunique(dropna=True) < 3:
         splits = []
         for v in data[feature].unique():
             if not pd.isnull(v):
@@ -138,8 +138,8 @@ def feature_bin_stats(data, feature, combiner=None, target="target", rules={}, e
     
     table = table.fillna(0.)
     
-    table['分档WOE值'] = table.apply(lambda x : np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)),axis=1)
-    table['分档IV值'] = table.apply(lambda x : (x['好样本占比'] - x['坏样本占比']) * np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)), axis=1)
+    table['分档WOE值'] = table.apply(lambda x : np.log(x['坏样本占比'] / (x['好样本占比'] + 1e-6)),axis=1)
+    table['分档IV值'] = table.apply(lambda x : (x['坏样本占比'] - x['好样本占比']) * np.log(x['坏样本占比'] / (x['好样本占比'] + 1e-6)), axis=1)
     table['指标IV值'] = table['分档IV值'].sum()
     
     table["LIFT值"] = table['坏样本率'] / (table["坏样本数"].sum() / table["样本总数"].sum())
@@ -322,7 +322,25 @@ def render_excel(excel_name, sheet_name=None, conditional_columns=[], freeze=Non
     workbook.close()
     
 
+def run_feature_table(feature, train=None, feature_dict=None, rules={}, combiner=None, target="target", return_feature=False):
+    table = feature_bin_stats(train, feature, feature_dict=feature_dict, rules=rules, combiner=combiner)
+    df_psi = cal_psi(train[[feature, target]], test[[feature, target]], feature, combiner=combiner)
+    
+    table = table.merge(df_psi, on="分箱", how="left")
+    
+    feature_bin = combiner.export()[feature]
+    feature_bin_dict = format_bins(np.array(feature_bin))
+    table["分箱"] = table["分箱"].map(feature_bin_dict)
+    
+    if return_feature:
+        return feature, table
+    else:
+        return table
+
+
 if __name__ == '__main__':
+    from functools import partial
+    from multiprocessing import Pool
     data = sc.germancredit()
     
     # 测试数据
@@ -350,9 +368,18 @@ if __name__ == '__main__':
     output_sheet_name = "指标有效性"
     tables = {}
     merge_row_number = []
-
+    
+    # _run_feature_table = partial(run_feature_table, train=train, feature_dict=feature_dict, rules={}, combiner=combiner, target=target, return_feature=True)
+    # all_feature_tables = joblib.Parallel(n_jobs=4)(joblib.delayed(_run_feature_table)(feature) for feature in cols)
+    
+    # for feature, table in all_feature_tables:
+    #     merge_row_number.append(len(table))
+    #     tables[feature] = table
+    
+    # import pdb; pdb.set_trace()
     for feature in cols:
         table = feature_bin_stats(train, feature, feature_dict=feature_dict, rules={}, combiner=combiner)
+        print(train.shape)
         df_psi = cal_psi(train[[feature, target]], test[[feature, target]], feature, combiner=combiner)
         
         table = table.merge(df_psi, on="分箱", how="left")
@@ -360,7 +387,8 @@ if __name__ == '__main__':
         feature_bin = combiner.export()[feature]
         feature_bin_dict = format_bins(np.array(feature_bin))
         table["分箱"] = table["分箱"].map(feature_bin_dict)
-        
+    
+        table = run_feature_table(feature)
         # plot_bin(table, show_na=True)
         merge_row_number.append(len(table))
         tables[feature] = table

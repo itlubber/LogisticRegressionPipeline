@@ -13,6 +13,7 @@ import pandas as pd
 import scorecardpy as sc
 from optbinning import OptimalBinning
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 import plotly.graph_objects as go
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill
@@ -22,12 +23,15 @@ import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import classification_report
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
+
+from processing import FeatureSelection, Combiner, WOETransformer, StepwiseSelection
 
 
 warnings.filterwarnings("ignore")
@@ -410,6 +414,69 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type)
     
     @staticmethod
+    def ks_plot(y_pred, target, title="", fontsize=14, figsize=(14, 6), save=None, color = ["#2639E9", "#F76E6C", "#FE7715"]):
+        fpr, tpr, thresholds = roc_curve(target, y_pred)
+        auc_value = auc(fpr, tpr)
+        
+        fig, ax = plt.subplots(1, 2, figsize = figsize)
+        
+        # KS曲线
+        ax[0].plot(thresholds[1 : ], (tpr - fpr)[1 : ], label = 'Kolmogorov Smirnov', color=color[0])
+        ax[0].plot(thresholds[1 : ], tpr[1 : ], label = 'True Positive Rate', color=color[1])
+        ax[0].plot(thresholds[1 : ], fpr[1 : ], label = 'False Positive Rate', color=color[2])
+        ax[0].fill_between(thresholds[1 : ], fpr[1 : ], tpr[1 : ], color=color[0], alpha=0.25)
+        ax[0].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        ax[0].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        
+        ax[0].spines['top'].set_color(color[0])
+        ax[0].spines['bottom'].set_color(color[0])
+        ax[0].spines['right'].set_color(color[0])
+        ax[0].spines['left'].set_color(color[0])
+
+        ks_value = max(tpr - fpr)
+        x = np.argwhere(abs(fpr - tpr) == ks_value)[0, 0]
+        thred_value = thresholds[x]
+        ax[0].axvline(thred_value, color = color[1], linestyle = '--', ymax = ks_value)
+        
+        ax[0].set_title(f'KS: {ks_value:.4f}    Best KS Cut Off: {thred_value:.4f}', fontsize=fontsize)
+        
+        ax[0].set_xlabel("Predict Proba", fontsize=fontsize)
+        # ax[0].set_ylabel('Rate')
+        
+        ax[0].set_xlim((0, max(thresholds[1 : ])))
+        ax[0].set_ylim((0, 1))
+        
+        ax[0].legend(frameon=False, fontsize=fontsize)
+        
+        # ROC 曲线
+        ax[1].plot(fpr, tpr, color=color[0], label="ROC Curve")
+        ax[1].stackplot(fpr, tpr, color=color[0], alpha=0.25)
+        ax[1].plot([0, 1], [0, 1], color=color[1], lw=2, linestyle='--')
+        ax[1].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        ax[1].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        
+        ax[1].spines['top'].set_color(color[0])
+        ax[1].spines['bottom'].set_color(color[0])
+        ax[1].spines['right'].set_color(color[0])
+        ax[1].spines['left'].set_color(color[0])
+        
+        ax[1].set_title(f'AUC: {auc_value:.4f}', fontsize=fontsize)
+
+        ax[1].set_xlabel("False Positive Rate", fontsize=fontsize)
+        ax[1].set_ylabel('True Positive Rate', fontsize=fontsize)
+        
+        ax[1].set_xlim((0, 1))
+        ax[1].set_ylim((0, 1))
+        
+        if title: title += " "
+        plt.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize)
+        
+        if save:
+            plt.savefig(save, dpi=120, format="png", )
+
+        return fig
+    
+    @staticmethod
     def PSI(y_pred_train, y_pred_oot):
         return toad.metrics.PSI(y_pred_train, y_pred_oot)
     
@@ -521,7 +588,6 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
     
 if __name__ == '__main__':
     # https://github.com/itlubber/openpyxl-excel-style-template/blob/main/pipeline_model.py
-    from processing import FeatureSelection, Combiner, WOETransformer, StepwiseSelection
     
     target = "creditability"
     data = sc.germancredit()
@@ -572,7 +638,7 @@ if __name__ == '__main__':
     
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
-
+    
     card = ScoreCard(target=target, pipeline=feature_pipeline, pretrain_lr=logistic)
     card.fit(woe_train)
     
