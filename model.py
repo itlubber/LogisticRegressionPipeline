@@ -15,6 +15,7 @@ from optbinning import OptimalBinning
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import plotly.graph_objects as go
+from plotly.io import write_image
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, PatternFill
 
@@ -249,9 +250,8 @@ class ITLubberLogisticRegression(LogisticRegression):
 
         return self
 
-    @staticmethod
-    def report(woe_train):
-        return pd.DataFrame(classification_report(train[target], logistic.predict(woe_train.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
+    def report(self, data):
+        return pd.DataFrame(classification_report(data[target], self.predict(data.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
 
     def summary(self):
         """
@@ -297,7 +297,7 @@ class ITLubberLogisticRegression(LogisticRegression):
         else:
             return x
 
-    def plot_weights(self):
+    def plot_weights(self, save=None):
         """
         Generates a weight plot(plotly chart) from `stats`
         Example:
@@ -349,6 +349,9 @@ class ITLubberLogisticRegression(LogisticRegression):
         )
         
         fig.update_layout(template="simple_white")
+        
+        if save:
+            write_image(fig, save)
 
         return fig
     
@@ -595,6 +598,7 @@ if __name__ == '__main__':
     data[target] = data[target].map({"good": 0, "bad": 1})
 
     train, test = train_test_split(data, test_size=0.3, shuffle=True, stratify=data[target])
+    oot = data.copy()
     feature_pipeline = Pipeline([
         ("preprocessing_select", FeatureSelection(target=target, engine="scorecardpy")),
         ("combiner", Combiner(target=target, min_samples=0.2)),
@@ -607,6 +611,7 @@ if __name__ == '__main__':
 
     woe_train = feature_pipeline.transform(train)
     woe_test = feature_pipeline.transform(test)
+    woe_oot = feature_pipeline.transform(oot)
 
     # logistic = StatsLogisticRegression(target=target)
     logistic = ITLubberLogisticRegression(target=target)
@@ -635,7 +640,14 @@ if __name__ == '__main__':
     
     # model summary
     # logistic.summary_save()
-    print(logistic.summary())
+    # logistic.plot_weights(save="logistic_train.png")
+    summary = logistic.summary().reset_index().rename(columns={"index": "Features"})
+    
+    train_report = logistic.report(woe_train)
+    test_report = logistic.report(woe_test)
+    oot_report = logistic.report(woe_oot)
+    
+    # import pdb; pdb.set_trace()
     
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
@@ -645,17 +657,37 @@ if __name__ == '__main__':
     
     train["score"] = card.predict(train)
     test["score"] = card.predict(test)
+    oot["score"] = card.predict(oot)
     
-    print(card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step"))
-    print(card.feature_bin_stats(train, "score", target=target, verbose=0, method="cart"))
+    # print(card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step"))
+    # print(card.feature_bin_stats(train, "score", target=target, verbose=0, method="cart"))
     
     train_score_rank = card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     test_score_rank = card.feature_bin_stats(test, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
+    oot_score_rank = card.feature_bin_stats(oot, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     
     writer = pd.ExcelWriter("评分卡结果验证表.xlsx", engine="openpyxl")
     
-    train_score_rank.to_excel(writer, sheet_name="训练集评分卡排序性")
-    test_score_rank.to_excel(writer, sheet_name="测试集评分卡排序性")
+    summary.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=1, index=False)
+    train_report.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=len(summary) + 5, index=False)
+    test_report.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=len(summary) + len(train_report) + 9, index=False)
+    oot_report.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=len(summary) + len(train_report) + len(test_report) + 13, index=False)
+    
+    worksheet = writer.sheets['逻辑回归拟合结果']
+    worksheet.cell(row=1, column=1).value = "入模变量系数及相关统计指标"
+    worksheet.cell(row=len(summary) + 5, column=1).value = "训练数据集模型预测报告"
+    worksheet.cell(row=len(summary) + len(train_report) + 9, column=1).value = "测试数据集模型预测报告"
+    worksheet.cell(row=len(summary) + len(train_report) + len(test_report) + 13, column=1).value = "跨时间验证集模型预测报告"
+    
+    train_score_rank.to_excel(writer, sheet_name="评分卡排序性", startrow=1, index=False)
+    test_score_rank.to_excel(writer, sheet_name="评分卡排序性", startrow=len(train_score_rank) + 5, index=False)
+    oot_score_rank.to_excel(writer, sheet_name="评分卡排序性", startrow=len(train_score_rank) + len(test_score_rank) + 9, index=False)
+    
+    worksheet = writer.sheets['评分卡排序性']
+    
+    worksheet.cell(row=1, column=1).value = "训练数据集评分排序性"
+    worksheet.cell(row=len(train_score_rank) + 5, column=1).value = "测试数据集评分排序性"
+    worksheet.cell(row=len(train_score_rank) + len(test_score_rank) + 9, column=1).value = "跨时间验证集评分排序性"
     
     writer.close()
     
