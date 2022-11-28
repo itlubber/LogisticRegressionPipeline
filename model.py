@@ -436,7 +436,8 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         ks_value = max(tpr - fpr)
         x = np.argwhere(abs(fpr - tpr) == ks_value)[0, 0]
         thred_value = thresholds[x]
-        ax[0].axvline(thred_value, color = color[1], linestyle = '--', ymax = ks_value)
+        ax[0].axvline(thred_value, color = color[1], linestyle = ':', ymax = ks_value)
+        ax[0].scatter(thred_value, ks_value, c=color[1])
         
         ax[0].set_title(f'KS: {ks_value:.4f}    Best KS Cut Off: {thred_value:.4f}', fontsize=fontsize)
         
@@ -451,7 +452,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         # ROC 曲线
         ax[1].plot(fpr, tpr, color=color[0], label="ROC Curve")
         ax[1].stackplot(fpr, tpr, color=color[0], alpha=0.25)
-        ax[1].plot([0, 1], [0, 1], color=color[1], lw=2, linestyle='--')
+        ax[1].plot([0, 1], [0, 1], color=color[1], lw=2, linestyle=':')
         ax[1].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
         ax[1].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
         
@@ -638,7 +639,7 @@ if __name__ == '__main__':
     
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
-    
+
     card = ScoreCard(target=target, pipeline=feature_pipeline, pretrain_lr=logistic)
     card.fit(woe_train)
     
