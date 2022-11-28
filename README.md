@@ -14,9 +14,9 @@
 > 基于 `sklearn` 的 `ITLubberLogisticRegression`
 
 
-<img src="https://itlubber.art/upload/2022/10/iShot_2022-10-28_13.16.32.png"></img>
+<img src="outputs/model_coef.png"></img>
 
-<img src="./model_train.png"></img>
+<img src="outputs/model_train.png"></img>
 
 
 ## 使用方法
