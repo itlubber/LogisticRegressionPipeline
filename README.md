@@ -13,6 +13,7 @@
 
 > 基于 `sklearn` 的 `ITLubberLogisticRegression`
 
+<img src="https://itlubber.art/upload/2022/11/image-1669653191871.png"></img>
 
 <img src="outputs/model_coef.png"></img>
 
