@@ -322,6 +322,9 @@ class ITLubberLogisticRegression(LogisticRegression):
         ax.set_ylabel("Variable", fontsize=fontsize, weight="bold")
         
         if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+            
             plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
 
         return fig
@@ -514,6 +517,9 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         plt.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize, fontweight="bold")
         
         if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+                
             plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
 
         return fig
@@ -534,14 +540,19 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         )
     
     @staticmethod
-    def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=0.6):
+    def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=0.6, save=None):
         mask = y_true == 0
         fig = plt.figure(figsize=figsize)
         plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
         plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
         plt.xlabel("score")
         plt.legend()
-        # plt.show()
+
+        if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+                
+            plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
         
         return fig
     
@@ -656,8 +667,9 @@ if __name__ == '__main__':
     
     logistic.fit(woe_train)
 
-    y_pred_train = logistic.predict(woe_train.drop(columns=target))
-    y_pred_test = logistic.predict(woe_test.drop(columns=target))
+    y_pred_train = logistic.predict_proba(woe_train.drop(columns=target))[:, 1]
+    y_pred_test = logistic.predict_proba(woe_test.drop(columns=target))[:, 1]
+    y_pred_oot = logistic.predict_proba(woe_oot.drop(columns=target))[:, 1]
     
     # params_grid = {
     #     # "logistic__C": [i / 1. for i in range(1, 10, 2)],
@@ -685,10 +697,9 @@ if __name__ == '__main__':
     test_report = logistic.report(woe_test)
     oot_report = logistic.report(woe_oot)
     
-    # import pdb; pdb.set_trace()
-    
     print("train: ", toad.metrics.KS(y_pred_train, train[target]), toad.metrics.AUC(y_pred_train, train[target]))
     print("test: ", toad.metrics.KS(y_pred_test, test[target]), toad.metrics.AUC(y_pred_test, test[target]))
+    print("oot: ", toad.metrics.KS(y_pred_oot, oot[target]), toad.metrics.AUC(y_pred_oot, oot[target]))
 
     card = ScoreCard(target=target, pipeline=feature_pipeline, pretrain_lr=logistic)
     card.fit(woe_train)

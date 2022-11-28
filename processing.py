@@ -191,15 +191,28 @@ class Combiner(TransformerMixin, BaseEstimator):
     
     def update(self, rules):
         if isinstance(rules, dict):
-            self.combiner.update(self.rules)
+            self.combiner.update(rules)
             
-    def bin_plot(self, data, x, rule=None, labels=True, result=False):
+    def export(self, to_json=None):
+        return self.combiner.export(to_json=to_json)
+    
+    def load(self, from_json=None):
+        self.combiner.load(from_json=from_json)
+        return self
+        
+    def bin_plot(self, data, x, rule=None, labels=True, result=False, save=None):
         if rule:
             if isinstance(rule, list):
                 rule = {x: rule}
             self.combiner.update(rule)
             
         bin_plot(self.combiner.transform(data, labels=labels), x=x, target=self.target)
+        
+        if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+                
+            plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
         
         if result:
             return self.combiner.export()[x]
