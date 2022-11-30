@@ -11,9 +11,11 @@ import warnings
 import numpy as np
 import pandas as pd
 import scorecardpy as sc
+from scorecardpy.perf import eva_pks, eva_proc
 from optbinning import OptimalBinning
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
+import seaborn as sns
 # import plotly.graph_objects as go
 # from plotly.io import write_image
 from openpyxl import load_workbook
@@ -249,9 +251,48 @@ class ITLubberLogisticRegression(LogisticRegression):
         self.p_val_coef_ = scipy.stats.norm.sf(abs(self.z_coef_)) * 2
 
         return self
+    
+    def corr(self, data, save=None):
+        corr = data.drop(columns=[self.target]).corr()
+        
+        if save:
+            self.corr_plot(data.drop(columns=[self.target]), save=save)
+            
+        return corr
+    
+    @staticmethod
+    def corr_plot(data, figure_size=(16, 8),  fontsize=14, color=["#2639E9", "#F76E6C", "#FE7715"], mask=False, save=None):
+        corr = data.corr()
+        corr_mask = np.zeros_like(corr, dtype = np.bool)
+        corr_mask[np.triu_indices_from(corr_mask)] = True
+
+        map_plot = toad.tadpole.tadpole.heatmap(
+            corr,
+            mask = corr_mask if mask else None,
+            cmap = sns.diverging_palette(267, 267, n=10, s=100, l=40),
+            vmax = 1,
+            vmin = -1,
+            center = 0,
+            square = True,
+            linewidths = .1,
+            annot = True,
+            fmt = '.2f',
+            figure_size = figure_size,
+        )
+
+        map_plot.tick_params(axis='x', labelrotation=270, labelsize=fontsize)
+        map_plot.tick_params(axis='y', labelrotation=0, labelsize=fontsize)
+        
+        if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+            
+            plt.savefig(save, dpi=240, format="png", bbox_inches="tight")
+        
+        return map_plot
 
     def report(self, data):
-        return pd.DataFrame(classification_report(data[target], self.predict(data.drop(columns=target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
+        return pd.DataFrame(classification_report(data[self.target], self.predict(data.drop(columns=self.target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
 
     def summary(self):
         """
@@ -445,13 +486,22 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return toad.metrics.AUC(y_pred, y_true)
     
     @staticmethod
-    def perf_eva(y_pred, y_true, title="", plot_type=["ks", "roc"]):
-        return sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type)
+    def perf_eva(y_pred, y_true, title="", plot_type=["ks", "roc"], save=None, figsize=(14, 6)):
+        # plt.figure(figsize=figsize)
+        rt = sc.perf_eva(y_true, y_pred, title=title, plot_type=plot_type, show_plot=True)
+
+        if save:
+            if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+                os.makedirs(os.path.dirname(save))
+            
+            rt["pic"].savefig(save, dpi=240, format="png", bbox_inches="tight")
+        
+        return rt
     
     @staticmethod
     def ks_plot(score, target, title="", fontsize=14, figsize=(14, 6), save=None, color = ["#2639E9", "#F76E6C", "#FE7715"]):
         fpr, tpr, thresholds = roc_curve(target, score)
-        auc_value = auc(fpr, tpr)
+        auc_value = toad.metrics.AUC(score, target)
         
         fig, ax = plt.subplots(1, 2, figsize = figsize)
         
@@ -540,13 +590,40 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         )
     
     @staticmethod
-    def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=0.6, save=None):
-        mask = y_true == 0
+    def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=1, save=None):
+        # mask = y_true == 0
         fig = plt.figure(figsize=figsize)
-        plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
-        plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
-        plt.xlabel("score")
-        plt.legend()
+        # plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
+        # plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
+        # plt.xlabel("score")
+        # plt.legend()
+        
+        sns.set(style='white', font_scale=1.5)
+        figsize=(15, 10)
+        fig, ax = plt.subplots(1, 1, figsize = figsize)
+        palette = sns.diverging_palette(340, 267, n=2, s=100, l=40)
+
+        sns.histplot(
+                    x=score, hue=y_true.replace({0: "good", 1: "bad"}), element="step", stat="density", bins=bins, common_bins=True, common_norm=True, palette=palette
+                )
+
+        sns.despine()
+
+        ax.spines['top'].set_color("#2639E9")
+        ax.spines['bottom'].set_color("#2639E9")
+        ax.spines['right'].set_color("#2639E9")
+        ax.spines['left'].set_color("#2639E9")
+
+        ax.tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF")
+        ax.tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF")
+        ax.set_xlabel("score")
+        ax.set_ylabel("density")
+        
+        # sns.histplot(
+        #     x=score, hue=y_true.replace({0: "好客户", 1: "坏客户"}), element="step", stat="density", bins=30, common_bins=True, common_norm=True, palette=sns.color_palette("bright", 2)
+        # )
+        
+        fig.tight_layout()
 
         if save:
             if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
@@ -556,12 +633,18 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         
         return fig
     
+    def _format_rule(self, rule, decimal = 2, **kwargs):
+        bins = self.format_bins(rule['bins'])
+        scores = np.around(rule['scores'], decimals = decimal).tolist()
+        
+        return dict(zip(bins, scores))
+    
     @staticmethod
     def class_steps(pipeline, query):
         return [v for k, v in pipeline.named_steps.items() if isinstance(v, query)]
     
     @staticmethod
-    def format_bins(bins):
+    def feature_bins(bins):
         if isinstance(bins, list): bins = np.array(bins)
         EMPTYBINS = len(bins) if not isinstance(bins[0], (set, list, np.ndarray)) else -1
         
@@ -609,7 +692,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         if rules and isinstance(rules, dict): combiner.update(rules)
 
         feature_bin = combiner.export()[feature]
-        feature_bin_dict = self.format_bins(np.array(feature_bin))
+        feature_bin_dict = self.feature_bins(np.array(feature_bin))
         
         df_bin = combiner.transform(data[[feature, target]], labels=False)
         
@@ -641,6 +724,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
     
 if __name__ == '__main__':
     # https://github.com/itlubber/openpyxl-excel-style-template/blob/main/pipeline_model.py
+    plt.ion()
     
     target = "creditability"
     data = sc.germancredit()
@@ -661,6 +745,14 @@ if __name__ == '__main__':
     woe_train = feature_pipeline.transform(train)
     woe_test = feature_pipeline.transform(test)
     woe_oot = feature_pipeline.transform(oot)
+    
+    # save all bin_plot
+    _combiner = feature_pipeline.named_steps["combiner"]
+    for col in woe_train.columns:
+        if col != target:
+            _combiner.bin_plot(train, col, labels=True, save=f"outputs/bin_plots/train_{col}.png")
+            _combiner.bin_plot(test, col, labels=True, save=f"outputs/bin_plots/test_{col}.png")
+            _combiner.bin_plot(oot, col, labels=True, save=f"outputs/bin_plots/oot_{col}.png")
 
     # logistic = StatsLogisticRegression(target=target)
     logistic = ITLubberLogisticRegression(target=target)
@@ -690,8 +782,14 @@ if __name__ == '__main__':
     
     # model summary
     # logistic.summary_save()
-    # logistic.plot_weights(save="logistic_train.png")
+    
+    logistic.plot_weights(save="outputs/logistic_train.png")
+    
     summary = logistic.summary().reset_index().rename(columns={"index": "Features"})
+    
+    train_corr = logistic.corr(woe_train, save="outputs/train_corr.png")
+    test_corr = logistic.corr(woe_test, save="outputs/test_corr.png")
+    oot_corr = logistic.corr(woe_oot, save="outputs/oot_corr.png")
     
     train_report = logistic.report(woe_train)
     test_report = logistic.report(woe_test)
@@ -708,14 +806,21 @@ if __name__ == '__main__':
     test["score"] = card.predict(test)
     oot["score"] = card.predict(oot)
     
-    # print(card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step"))
-    # print(card.feature_bin_stats(train, "score", target=target, verbose=0, method="cart"))
+    card.perf_eva(train["score"], train[target], title="Train Dataset", save="outputs/train_ksplot.png")
+    card.perf_eva(test["score"], test[target], title="Test Dataset", save="outputs/test_ksplot.png")
+    card.perf_eva(oot["score"], oot[target], title="OOT Dataset", save="outputs/oot_ksplot.png")
+    
+    card.score_hist(train["score"], train[target], save="outputs/train_scorehist.png")
+    card.score_hist(test["score"], test[target], save="outputs/test_scorehist.png")
+    card.score_hist(oot["score"], oot[target], save="outputs/oot_scorehist.png")
     
     train_score_rank = card.feature_bin_stats(train, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     test_score_rank = card.feature_bin_stats(test, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     oot_score_rank = card.feature_bin_stats(oot, "score", target=target, rules=[i for i in range(400, 800, 50)], verbose=0, method="step")
     
-    writer = pd.ExcelWriter("评分卡结果验证表.xlsx", engine="openpyxl")
+    card_points = card.export(to_frame=True)
+    
+    writer = pd.ExcelWriter("outputs/评分卡结果验证表.xlsx", engine="openpyxl")
     
     summary.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=1, index=False)
     train_report.to_excel(writer, sheet_name="逻辑回归拟合结果", startrow=len(summary) + 5, index=False)
@@ -727,6 +832,17 @@ if __name__ == '__main__':
     worksheet.cell(row=len(summary) + 5, column=1).value = "训练数据集模型预测报告"
     worksheet.cell(row=len(summary) + len(train_report) + 9, column=1).value = "测试数据集模型预测报告"
     worksheet.cell(row=len(summary) + len(train_report) + len(test_report) + 13, column=1).value = "跨时间验证集模型预测报告"
+    
+    train_corr.to_excel(writer, sheet_name="入模变量相关性", startrow=1, index=True)
+    test_corr.to_excel(writer, sheet_name="入模变量相关性", startrow=len(train_corr) + 5, index=True)
+    oot_corr.to_excel(writer, sheet_name="入模变量相关性", startrow=len(train_corr) + len(test_corr) + 9, index=True)
+    
+    worksheet = writer.sheets['入模变量相关性']
+    worksheet.cell(row=2, column=1).value = "训练数据集入模变量相关性"
+    worksheet.cell(row=len(train_corr) + 6, column=1).value = "测试数据集入模变量相关性"
+    worksheet.cell(row=len(train_corr) + len(test_corr) + 10, column=1).value = "跨时间验证集入模变量相关性"
+    
+    card_points.to_excel(writer, sheet_name="评分卡", index=False)
     
     train_score_rank.to_excel(writer, sheet_name="评分卡排序性", startrow=1, index=False)
     test_score_rank.to_excel(writer, sheet_name="评分卡排序性", startrow=len(train_score_rank) + 5, index=False)
@@ -742,5 +858,5 @@ if __name__ == '__main__':
     
     from utils import render_excel
     
-    render_excel("评分卡结果验证表.xlsx", border=False)
+    render_excel("outputs/评分卡结果验证表.xlsx", border=False)
     

@@ -230,6 +230,29 @@ class Combiner(TransformerMixin, BaseEstimator):
         
     def badrate_plot(self, data, date_column, feature, labels=True):
         badrate_plot(self.combiner.transform(data[[date_column, feature, self.target]], labels=labels), target=self.target, x=date_column, by=feature)
+    
+    @property
+    def rules(self):
+        return self.combiner._rules
+    
+    @rules.setter
+    def rules(self, value):
+        self.combiner._rules = value
+        
+    def __len__(self):
+        return len(self.combiner._rules.keys())
+    
+    def __contains__(self, key):
+        return key in self.combiner._rules
+    
+    def __getitem__(self, key):
+        return self.combiner._rules[key]
+    
+    def __setitem__(self, key, value):
+        self.combiner._rules[key] = value
+
+    def __iter__(self):
+        return iter(self.combiner._rules)
         
         
 class WOETransformer(TransformerMixin, BaseEstimator):
@@ -245,6 +268,29 @@ class WOETransformer(TransformerMixin, BaseEstimator):
 
     def transform(self, x, y=None):
         return self.transformer.transform(x)
+    
+    @property
+    def rules(self):
+        return self.transformer._rules
+    
+    @rules.setter
+    def rules(self, value):
+        self.transformer._rules = value
+        
+    def __len__(self):
+        return len(self.transformer._rules.keys())
+    
+    def __contains__(self, key):
+        return key in self.transformer._rules
+    
+    def __getitem__(self, key):
+        return self.transformer._rules[key]
+    
+    def __setitem__(self, key, value):
+        self.transformer._rules[key] = value
+
+    def __iter__(self):
+        return iter(self.transformer._rules)
     
     
 class StepwiseSelection(TransformerMixin, BaseEstimator):
