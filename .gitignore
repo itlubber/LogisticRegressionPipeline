@@ -130,3 +130,5 @@ dmypy.json
 *.ipynb
 *.zip
 .DS_store
+catboost_info/
+test.py
