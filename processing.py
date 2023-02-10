@@ -34,18 +34,22 @@ plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
 plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
-def drop_identical(frame, threshold = 0.95, return_drop = False, exclude = None):
+def drop_identical(frame, threshold = 0.95, return_drop = False, exclude = None, target = None):
     """drop columns by identical
     Args:
         frame (DataFrame): dataframe that will be used
         threshold (number): drop the features whose identical num is greater than threshold. if threshold is float, it will be use as percentage
         return_drop (bool): if need to return features' name who has been dropped
         exclude (array-like): list of feature names that will not be dropped
+        target (str): target's name in dataframe
     Returns:
         DataFrame: selected dataframe
         array: list of feature names that has been dropped
     """
     cols = frame.columns.copy()
+    
+    if target is not None:
+        cols.drop(target)
 
     if exclude is not None:
         cols = cols.drop(exclude)
@@ -85,13 +89,13 @@ def select(frame, target = 'target', empty = 0.9, iv = 0.02, corr = 0.7,
         DataFrame: selected dataframe
         dict: list of dropped feature names in each step
     """
-    empty_drop = iv_drop = corr_drop = identical_drop = None
+    empty_drop, iv_drop, corr_drop, identical_drop = None, None, None, None
 
     if empty is not False:
         frame, empty_drop = toad.selection.drop_empty(frame, threshold = empty, return_drop = True, exclude = exclude)
         
     if identical is not False:
-        frame, identical_drop = drop_identical(frame, threshold = identical, return_drop = True, exclude = exclude)
+        frame, identical_drop = drop_identical(frame, threshold = identical, return_drop = True, exclude = exclude, target = target)
 
     if iv is not False:
         frame, iv_drop, iv_list = toad.selection.drop_iv(frame, target = target, threshold = iv, return_drop = True, return_iv = True, exclude = exclude)
