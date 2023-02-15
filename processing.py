@@ -13,11 +13,15 @@ import numpy as np
 import pandas as pd
 import scorecardpy as sc
 import statsmodels.api as sm
+from functools import partial
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from IPython.display import Image
 from openpyxl import load_workbook
+# from joblib import Parallel, delayed
+from concurrent.futures import ProcessPoolExecutor
 from openpyxl.styles import Alignment
+from optbinning import OptimalBinning
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.utils.validation import check_is_fitted
@@ -118,7 +122,7 @@ def select(frame, target = 'target', empty = 0.9, iv = 0.02, corr = 0.7,
         }
         res += (d,)
 
-    return toad.utils.unpack_tuple.unpack_tuple(res)
+    return toad.utils.unpack_tuple(res)
 
 
 class FeatureSelection(TransformerMixin, BaseEstimator):
@@ -176,18 +180,73 @@ class FeatureSelection(TransformerMixin, BaseEstimator):
     
 class Combiner(TransformerMixin, BaseEstimator):
     
-    def __init__(self, target="target", method='chi', empty_separate=False, min_samples=0.05, n_bins=None, rules={}):
+    def __init__(self, target="target", method='chi', engine="toad", empty_separate=False, min_samples=0.05, min_n_bins=2, max_n_bins=3, max_n_prebins=10, min_prebin_size=0.02, min_bin_size=0.05, max_bin_size=None, gamma=0.01, monotonic_trend="auto_asc_desc", rules={}, n_jobs=1):
         self.combiner = toad.transform.Combiner()
         self.method = method
         self.empty_separate = empty_separate
         self.target = target
         self.min_samples = min_samples
-        self.n_bins = n_bins
+        self.max_n_bins = max_n_bins
+        self.min_n_bins = min_n_bins
+        self.min_bin_size = min_bin_size
+        self.max_bin_size = max_bin_size
+        self.max_n_prebins = max_n_prebins
+        self.min_prebin_size = min_prebin_size
+        self.gamma = gamma
+        self.monotonic_trend = monotonic_trend
         self.rules = rules
+        self.engine = engine
+        self.n_jobs = n_jobs
+        
+    def optbinning_bins(self, feature, data=None, target="target", min_n_bins=2, max_n_bins=3, max_n_prebins=10, min_prebin_size=0.02, min_bin_size=0.05, max_bin_size=None, gamma=0.01, monotonic_trend="auto_asc_desc"):
+        if data[feature].dropna().nunique() <= min_n_bins:
+            splits = []
+            for v in data[feature].dropna().unique():
+                splits.append(v)
+
+            if str(data[feature].dtypes) in ["object", "string", "category"]:
+                rule = {feature: [[s] for s in splits]}
+                rule[feature].append([[np.nan]])
+            else:
+                rule = {feature: sorted(splits) + [np.nan]}
+        else:
+            try:
+                y = data[target]
+                if str(data[feature].dtypes) in ["object", "string", "category"]:
+                    dtype = "categorical"
+                    x = data[feature].astype("category").values
+                else:
+                    dtype = "numerical"
+                    x = data[feature].values
+
+                _combiner = OptimalBinning(feature, dtype=dtype, min_n_bins=min_n_bins, max_n_bins=max_n_bins, max_n_prebins=max_n_prebins, min_prebin_size=min_prebin_size, min_bin_size=min_bin_size, max_bin_size=max_bin_size, monotonic_trend=monotonic_trend, gamma=gamma).fit(x, y)
+                if _combiner.status == "OPTIMAL":
+                    rule = {feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [[np.nan] if dtype == "categorical" else np.nan]}
+                else:
+                    raise Exception("optimalBinning error")
+            
+            except Exception as e:
+                _combiner = toad.transform.Combiner()
+                _combiner.fit(data[[feature, target]].dropna(), target, method="chi", min_samples=self.min_samples, n_bins=self.max_n_bins)
+                rule = {feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.export()[feature]] + [[np.nan] if dtype == "categorical" else np.nan]}
+        
+        self.combiner.update(rule)
     
     def fit(self, x, y=None):
-        self.combiner.fit(x, y=self.target, method=self.method, min_samples=self.min_samples, n_bins=self.n_bins)
+        if self.engine == "optbinning":
+            feature_optbinning_bins = partial(self.optbinning_bins, data=x, target=self.target, min_n_bins=self.min_n_bins, max_n_bins=self.max_n_bins, max_n_prebins=self.max_n_prebins, min_prebin_size=self.min_prebin_size, min_bin_size=self.min_bin_size, max_bin_size=self.max_bin_size, gamma=self.gamma, monotonic_trend=self.monotonic_trend)
+            if self.n_jobs > 1:
+                with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
+                    [executor.submit(feature_optbinning_bins(feature)) for feature in x.columns.drop(self.target)]
+            else:
+                for feature in x.drop(columns=[self.target]):
+                    self.optbinning_bins(feature, data=x, target=self.target, min_n_bins=self.min_n_bins, max_n_bins=self.max_n_bins, max_n_prebins=self.max_n_prebins, min_prebin_size=self.min_prebin_size, min_bin_size=self.min_bin_size, max_bin_size=self.max_bin_size, gamma=self.gamma, monotonic_trend=self.monotonic_trend)
+                    # feature_optbinning_bins(feature)
+        else:
+            self.combiner.fit(x, y=self.target, method=self.method, min_samples=self.min_samples, n_bins=self.max_n_bins)
+        
         self.update(self.rules)
+        
         return self
     
     def transform(self, x, y=None, labels=False):

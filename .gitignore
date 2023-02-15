@@ -132,3 +132,4 @@ dmypy.json
 .DS_store
 catboost_info/
 test.py
+.idea
