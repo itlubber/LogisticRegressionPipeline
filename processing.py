@@ -268,7 +268,7 @@ class Combiner(TransformerMixin, BaseEstimator):
             if isinstance(rule, list):
                 rule = {x: rule}
             self.combiner.update(rule)
-            
+        
         bin_plot(self.combiner.transform(data, labels=labels), x=x, target=self.target)
         
         if save:

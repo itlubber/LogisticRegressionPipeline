@@ -43,6 +43,12 @@ plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
 plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
+def pyplot_chinese(font_path='utils/matplot_chinese.ttf'):
+    font_manager.fontManager.addfont(font_path)
+    plt.rcParams['font.family'] = font_manager.FontProperties(fname=font_path).get_name()
+    plt.rcParams['axes.unicode_minus']=False
+
+
 class StatsLogisticRegression(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", intercept=True, ):
@@ -252,16 +258,16 @@ class ITLubberLogisticRegression(LogisticRegression):
 
         return self
     
-    def corr(self, data, save=None):
+    def corr(self, data, save=None, annot=True):
         corr = data.drop(columns=[self.target]).corr()
         
         if save:
-            self.corr_plot(data.drop(columns=[self.target]), save=save)
+            self.corr_plot(data.drop(columns=[self.target]), save=save, annot=annot)
             
         return corr
     
     @staticmethod
-    def corr_plot(data, figure_size=(16, 8),  fontsize=14, color=["#2639E9", "#F76E6C", "#FE7715"], mask=False, save=None):
+    def corr_plot(data, figure_size=(16, 8),  fontsize=14, color=["#2639E9", "#F76E6C", "#FE7715"], mask=False, save=None, annot=True):
         corr = data.corr()
         corr_mask = np.zeros_like(corr, dtype = np.bool)
         corr_mask[np.triu_indices_from(corr_mask)] = True
@@ -275,7 +281,7 @@ class ITLubberLogisticRegression(LogisticRegression):
             center = 0,
             square = True,
             linewidths = .1,
-            annot = True,
+            annot = annot,
             fmt = '.2f',
             figure_size = figure_size,
         )
@@ -499,72 +505,88 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return rt
     
     @staticmethod
-    def ks_plot(score, target, title="", fontsize=14, figsize=(14, 6), save=None, color = ["#2639E9", "#F76E6C", "#FE7715"]):
-        fpr, tpr, thresholds = roc_curve(target, score)
-        auc_value = toad.metrics.AUC(score, target)
+    def ks_plot(score, target, title="", fontsize=14, figsize=(16, 8), save=None, colors=["#2639E9", "#F76E6C", "#FE7715"]):
+        try:
+            pyplot_chinese("YunShuFaJiaYangYongZhiShouJinZhengKaiJian.ttf")
+        except:
+            pass
         
+        if np.mean(score) < 0 or np.mean(score) > 1:
+            warnings.warn('Since the average of pred is not in [0,1], it is treated as predicted score but not probability.')
+            score = -score
+
+        df = pd.DataFrame({'label': target, 'pred': score})
+        def n0(x): return sum(x==0)
+        def n1(x): return sum(x==1)
+        df_ks = df.sort_values('pred', ascending=False).reset_index(drop=True) \
+            .assign(group=lambda x: np.ceil((x.index+1)/(len(x.index)/len(df.index)))) \
+            .groupby('group')['label'].agg([n0, n1]) \
+            .reset_index().rename(columns={'n0':'good','n1':'bad'}) \
+            .assign(
+                group=lambda x: (x.index+1)/len(x.index),
+                cumgood=lambda x: np.cumsum(x.good)/sum(x.good), 
+                cumbad=lambda x: np.cumsum(x.bad)/sum(x.bad)
+            ).assign(ks=lambda x:abs(x.cumbad-x.cumgood))
+
         fig, ax = plt.subplots(1, 2, figsize = figsize)
-        
+
         # KS曲线
-        ax[0].plot(thresholds[1 : ], (tpr - fpr)[1 : ], label = 'Kolmogorov Smirnov', color=color[0])
-        ax[0].plot(thresholds[1 : ], tpr[1 : ], label = 'True Positive Rate', color=color[1])
-        ax[0].plot(thresholds[1 : ], fpr[1 : ], label = 'False Positive Rate', color=color[2])
-        ax[0].fill_between(thresholds[1 : ], fpr[1 : ], tpr[1 : ], color=color[0], alpha=0.25)
-        ax[0].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
-        ax[0].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
-        
-        ax[0].spines['top'].set_color(color[0])
-        ax[0].spines['bottom'].set_color(color[0])
-        ax[0].spines['right'].set_color(color[0])
-        ax[0].spines['left'].set_color(color[0])
+        dfks = df_ks.loc[lambda x: x.ks==max(x.ks)].sort_values('group').iloc[0]
 
-        ks_value = max(tpr - fpr)
-        x = np.argwhere(abs(fpr - tpr) == ks_value)[0, 0]
-        thred_value = thresholds[x]
-        ax[0].axvline(thred_value, color = color[1], linestyle = ':', ymax = ks_value)
-        ax[0].scatter(thred_value, ks_value, c=color[1])
-        # ax[0].text(thred_value, ks_value + 0.02, f"ks:{ks_value:.2f} threshold:{thred_value:.2f}", fontsize=fontsize, horizontalalignment="center")
-        ax[0].text(0.5, 0.5, f"ks:{ks_value:.2f} threshold:{thred_value:.2f}", fontsize=fontsize, horizontalalignment="center", transform=ax[0].transAxes)
+        ax[0].plot(df_ks.group, df_ks.ks, color=colors[0], label="KS曲线")
+        ax[0].plot(df_ks.group, df_ks.cumgood, color=colors[1], label="累积好客户占比")
+        ax[0].plot(df_ks.group, df_ks.cumbad, color=colors[2], label="累积坏客户占比")
+        ax[0].fill_between(df_ks.group, df_ks.cumbad, df_ks.cumgood, color=colors[0], alpha=0.25)
 
-        # ax[0].set_title(f'KS: {ks_value:.4f}    Best KS Cut Off: {thred_value:.4f}', fontsize=fontsize)
-        
-        ax[0].set_xlabel("Predict Proba", fontsize=fontsize)
-        # ax[0].set_ylabel('Rate')
-        
-        ax[0].set_xlim((0, max(thresholds[1 : ])))
+        ax[0].plot([dfks['group'], dfks['group']], [0, dfks['ks']], 'r--')
+        ax[0].text(dfks['group'], dfks['ks'], f"KS: {round(dfks['ks'],4)} at: {dfks.group:.2%}", horizontalalignment='center', fontsize=fontsize)
+
+        ax[0].spines['top'].set_color(colors[0])
+        ax[0].spines['bottom'].set_color(colors[0])
+        ax[0].spines['right'].set_color(colors[0])
+        ax[0].spines['left'].set_color(colors[0])
+        ax[0].set_xlabel('% of Population', fontsize=fontsize)
+        ax[0].set_ylabel('% of Total Bad / Good', fontsize=fontsize)
+
+        ax[0].set_xlim((0, 1))
         ax[0].set_ylim((0, 1))
         
-        ax[0].yaxis.tick_left()
-        ax[0].yaxis.set_label_position("left")
-        
-        ax[0].legend(frameon=False, fontsize=fontsize)
-        
+        handles1, labels1 = ax[0].get_legend_handles_labels()
+
+        ax[0].legend(loc='upper center', ncol=len(labels1), bbox_to_anchor=(0.5, 1.15), frameon=False)
+
         # ROC 曲线
-        ax[1].plot(fpr, tpr, color=color[0], label="ROC Curve")
-        ax[1].stackplot(fpr, tpr, color=color[0], alpha=0.25)
-        ax[1].plot([0, 1], [0, 1], color=color[1], lw=2, linestyle=':')
+        fpr, tpr, thresholds = roc_curve(target, score)
+        auc_value = toad.metrics.AUC(score, target)
+
+        ax[1].plot(fpr, tpr, color=colors[0], label="ROC Curve")
+        ax[1].stackplot(fpr, tpr, color=colors[0], alpha=0.25)
+        ax[1].plot([0, 1], [0, 1], color=colors[1], lw=2, linestyle=':')
         ax[1].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
         ax[1].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
-        
-        ax[1].spines['top'].set_color(color[0])
-        ax[1].spines['bottom'].set_color(color[0])
-        ax[1].spines['right'].set_color(color[0])
-        ax[1].spines['left'].set_color(color[0])
-        
         ax[1].text(0.5, 0.5, f"AUC: {auc_value:.4f}", fontsize=fontsize, horizontalalignment="center", transform=ax[1].transAxes)
-        # ax[1].set_title(f'AUC: {auc_value:.4f}', fontsize=fontsize)
 
+        ax[1].spines['top'].set_color(colors[0])
+        ax[1].spines['bottom'].set_color(colors[0])
+        ax[1].spines['right'].set_color(colors[0])
+        ax[1].spines['left'].set_color(colors[0])
         ax[1].set_xlabel("False Positive Rate", fontsize=fontsize)
         ax[1].set_ylabel('True Positive Rate', fontsize=fontsize)
-        
+
         ax[1].set_xlim((0, 1))
         ax[1].set_ylim((0, 1))
-        
+
         ax[1].yaxis.tick_right()
         ax[1].yaxis.set_label_position("right")
+
+        handles2, labels2 = ax[1].get_legend_handles_labels()
+
+        ax[1].legend(loc='upper center', ncol=len(labels2), bbox_to_anchor=(0.5, 1.15), frameon=False)
         
         if title: title += " "
-        plt.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize, fontweight="bold")
+        fig.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize, fontweight="bold")
+        
+        # plt.tight_layout()
         
         if save:
             if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
@@ -670,23 +692,24 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
 
         return {i if b != "缺失值" else EMPTYBINS: b for i, b in enumerate(l)}
     
-    def feature_bin_stats(self, data, feature, target="target", rules={}, empty_separate=True, method='step', max_n_bins=10, clip_v=None, desc="评分卡分数", verbose=0):
+    def feature_bin_stats(self, data, feature, target="target", rules={}, empty_separate=True, method='step', max_n_bins=10, clip_v=None, desc="评分卡分数", verbose=0, combiner=None, ks=False):
         if method not in ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']:
             raise "method is the one of ['dt', 'chi', 'quantile', 'step', 'kmeans', 'cart']"
         
-        combiner = toad.transform.Combiner()
-        
-        if method == "cart":
-            x = data[feature].values
-            y = data[target]
-            _combiner = OptimalBinning(feature, dtype="numerical", max_n_bins=max_n_bins, monotonic_trend="auto_asc_desc", gamma=0.01).fit(x, y)
-            if _combiner.status == "OPTIMAL":
-                rules.update({feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [np.nan]})
-        else:
-            combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins, clip_v=clip_v)
+        if combiner is None:
+            combiner = toad.transform.Combiner()
+            
+            if method == "cart":
+                x = data[feature].values
+                y = data[target]
+                _combiner = OptimalBinning(feature, dtype="numerical", max_n_bins=max_n_bins, monotonic_trend="auto_asc_desc", gamma=0.01).fit(x, y)
+                if _combiner.status == "OPTIMAL":
+                    rules.update({feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [np.nan]})
+            else:
+                combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins, clip_v=clip_v)
 
-        if verbose > 0:
-            print(data[feature].describe())
+            if verbose > 0:
+                print(data[feature].describe())
 
         if rules and isinstance(rules, list): rules = {feature: rules}
         if rules and isinstance(rules, dict): combiner.update(rules)
@@ -699,10 +722,14 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         table = df_bin[[feature, target]].groupby([feature, target]).agg(len).unstack()
         table.columns.name = None
         table = table.rename(columns = {0 : '好样本数', 1 : '坏样本数'}).fillna(0)
+        if "好样本数" not in table.columns:
+            table["好样本数"] = 0
+        if "坏样本数" not in table.columns:
+            table["坏样本数"] = 0
+        
         table["指标名称"] = feature
         table["指标含义"] = desc
         table = table.reset_index().rename(columns={feature: "分箱"})
-        table["分箱"] = table["分箱"].map(feature_bin_dict)
 
         table['样本总数'] = table['好样本数'] + table['坏样本数']
         table['样本占比'] = table['样本总数'] / table['样本总数'].sum()
@@ -714,12 +741,26 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         
         table['分档WOE值'] = table.apply(lambda x : np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)),axis=1)
         table['分档IV值'] = table.apply(lambda x : (x['好样本占比'] - x['坏样本占比']) * np.log(x['好样本占比'] / (x['坏样本占比'] + 1e-6)), axis=1)
+        
+        table = table.replace(np.inf, 0).replace(-np.inf, 0)
+        
         table['指标IV值'] = table['分档IV值'].sum()
         
         table["LIFT值"] = table['坏样本率'] / (table["坏样本数"].sum() / table["样本总数"].sum())
         table["累积LIFT值"] = table["LIFT值"].cumsum()
         
-        return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值']]
+        if ks:
+            table = table.sort_values("分箱")
+            table["累积好样本数"] = table["好样本数"].cumsum()
+            table["累积坏样本数"] = table["坏样本数"].cumsum()
+            table["分档KS值"] = table["累积坏样本数"] / table['坏样本数'].sum() - table["累积好样本数"] / table['好样本数'].sum()
+        
+        table["分箱"] = table["分箱"].map(feature_bin_dict)
+        
+        if ks:
+            return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值', '累积好样本数', '累积坏样本数', '分档KS值']]
+        else:
+            return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值']]
 
     
 if __name__ == '__main__':
