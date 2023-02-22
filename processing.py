@@ -34,8 +34,8 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 warnings.filterwarnings("ignore")
 pd.set_option('display.width', 5000)
-plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
-plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
+# plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
+# plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
 def drop_identical(frame, threshold = 0.95, return_drop = False, exclude = None, target = None):

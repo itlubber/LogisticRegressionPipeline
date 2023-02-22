@@ -39,8 +39,8 @@ from processing import FeatureSelection, Combiner, WOETransformer, StepwiseSelec
 
 warnings.filterwarnings("ignore")
 pd.set_option('display.width', 5000)
-plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
-plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
+# plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
+# plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
 def pyplot_chinese(font_path='utils/matplot_chinese.ttf'):
@@ -298,7 +298,11 @@ class ITLubberLogisticRegression(LogisticRegression):
         return map_plot
 
     def report(self, data):
-        return pd.DataFrame(classification_report(data[self.target], self.predict(data.drop(columns=self.target)), output_dict=True)).T.reset_index().rename(columns={"index": "desc"})
+        report_dict = classification_report(data[self.target], self.predict(data.drop(columns=self.target)), output_dict=True, target_names=["好客户", "坏客户"])
+        accuracy = report_dict.pop("accuracy")
+        _report = pd.DataFrame(report_dict).T.reset_index().rename(columns={"index": "desc"})
+        _report.loc[len(_report)] = ['accuracy', '', '', accuracy, len(data)]
+        return _report
 
     def summary(self):
         """
@@ -354,8 +358,8 @@ class ITLubberLogisticRegression(LogisticRegression):
         
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         ax.errorbar(x, y, xerr=[lower_error, upper_error], fmt="o", ecolor=color[0], elinewidth=2, capthick=2, capsize=4, ms=6, mfc=color[0], mec=color[0])
-        ax.tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
-        ax.tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        # ax.tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        # ax.tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
         ax.axvline(0, color=color[0], linestyle='--', ymax=len(y), alpha=0.5)
         ax.spines['top'].set_color(color[0])
         ax.spines['bottom'].set_color(color[0])
@@ -506,11 +510,6 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
     
     @staticmethod
     def ks_plot(score, target, title="", fontsize=14, figsize=(16, 8), save=None, colors=["#2639E9", "#F76E6C", "#FE7715"]):
-        try:
-            pyplot_chinese("YunShuFaJiaYangYongZhiShouJinZhengKaiJian.ttf")
-        except:
-            pass
-        
         if np.mean(score) < 0 or np.mean(score) > 1:
             warnings.warn('Since the average of pred is not in [0,1], it is treated as predicted score but not probability.')
             score = -score
@@ -553,7 +552,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         
         handles1, labels1 = ax[0].get_legend_handles_labels()
 
-        ax[0].legend(loc='upper center', ncol=len(labels1), bbox_to_anchor=(0.5, 1.15), frameon=False)
+        ax[0].legend(loc='upper center', ncol=len(labels1), bbox_to_anchor=(0.5, 1.1), frameon=False)
 
         # ROC 曲线
         fpr, tpr, thresholds = roc_curve(target, score)
@@ -562,8 +561,8 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         ax[1].plot(fpr, tpr, color=colors[0], label="ROC Curve")
         ax[1].stackplot(fpr, tpr, color=colors[0], alpha=0.25)
         ax[1].plot([0, 1], [0, 1], color=colors[1], lw=2, linestyle=':')
-        ax[1].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
-        ax[1].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        # ax[1].tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
+        # ax[1].tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF", labelsize=fontsize)
         ax[1].text(0.5, 0.5, f"AUC: {auc_value:.4f}", fontsize=fontsize, horizontalalignment="center", transform=ax[1].transAxes)
 
         ax[1].spines['top'].set_color(colors[0])
@@ -581,12 +580,12 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
 
         handles2, labels2 = ax[1].get_legend_handles_labels()
 
-        ax[1].legend(loc='upper center', ncol=len(labels2), bbox_to_anchor=(0.5, 1.15), frameon=False)
+        ax[1].legend(loc='upper center', ncol=len(labels2), bbox_to_anchor=(0.5, 1.1), frameon=False)
         
         if title: title += " "
-        fig.suptitle(f"{title}K-S & ROC CURVE", fontsize=fontsize, fontweight="bold")
+        fig.suptitle(f"{title}K-S & ROC CURVE\n", fontsize=fontsize, fontweight="bold")
         
-        # plt.tight_layout()
+        plt.tight_layout()
         
         if save:
             if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
@@ -613,20 +612,11 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
     
     @staticmethod
     def score_hist(score, y_true, figsize=(15, 10), bins=20, alpha=1, save=None):
-        # mask = y_true == 0
-        fig = plt.figure(figsize=figsize)
-        # plt.hist(score[mask], label="好样本", color="#2639E9", alpha=alpha, bins=bins)
-        # plt.hist(score[~mask], label="坏样本", color="#F76E6C", alpha=alpha, bins=bins)
-        # plt.xlabel("score")
-        # plt.legend()
-        
-        sns.set(style='white', font_scale=1.5)
-        figsize=(15, 10)
         fig, ax = plt.subplots(1, 1, figsize = figsize)
         palette = sns.diverging_palette(340, 267, n=2, s=100, l=40)
 
         sns.histplot(
-                    x=score, hue=y_true.replace({0: "good", 1: "bad"}), element="step", stat="density", bins=bins, common_bins=True, common_norm=True, palette=palette
+                    x=score, hue=y_true.replace({0: "good", 1: "bad"}), element="step", stat="density", bins=bins, common_bins=True, common_norm=True, palette=palette, ax=ax
                 )
 
         sns.despine()
@@ -636,14 +626,10 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         ax.spines['right'].set_color("#2639E9")
         ax.spines['left'].set_color("#2639E9")
 
-        ax.tick_params(axis='x', labelrotation=0, grid_color="#FFFFFF")
-        ax.tick_params(axis='y', labelrotation=0, grid_color="#FFFFFF")
         ax.set_xlabel("score")
         ax.set_ylabel("density")
         
-        # sns.histplot(
-        #     x=score, hue=y_true.replace({0: "好客户", 1: "坏客户"}), element="step", stat="density", bins=30, common_bins=True, common_norm=True, palette=sns.color_palette("bright", 2)
-        # )
+        ax.legend(["坏样本", "好样本"], loc='upper center', ncol=len(y_true.unique()), bbox_to_anchor=(0.5, 1.05), frameon=False, fontsize=14)
         
         fig.tight_layout()
 
@@ -747,7 +733,8 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         table['指标IV值'] = table['分档IV值'].sum()
         
         table["LIFT值"] = table['坏样本率'] / (table["坏样本数"].sum() / table["样本总数"].sum())
-        table["累积LIFT值"] = table["LIFT值"].cumsum()
+        table["累积LIFT值"] = (table['坏样本数'].cumsum() / table['样本总数'].cumsum()) / (table["坏样本数"].sum() / table["样本总数"].sum())
+        # table["累积LIFT值"] = table["LIFT值"].cumsum()
         
         if ks:
             table = table.sort_values("分箱")
