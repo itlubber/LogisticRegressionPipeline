@@ -51,7 +51,14 @@ def pyplot_chinese(font_path='utils/matplot_chinese.ttf'):
 
 class StatsLogisticRegression(TransformerMixin, BaseEstimator):
     
-    def __init__(self, target="target", intercept=True, ):
+    def __init__(self, target="target", intercept=True):
+        """
+        基于statsmodels的逻辑回归方法
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            intercept: 是否包含截距，默认 True，即包含截距
+        """
         self.intercept = intercept
         self.target = target
         self.classifier = None
@@ -195,7 +202,9 @@ class ITLubberLogisticRegression(LogisticRegression):
     def __init__(self, target="target", penalty="l2", calculate_stats=True, dual=False, tol=0.0001, C=1.0, fit_intercept=True, intercept_scaling=1, class_weight=None, random_state=None, solver="lbfgs", max_iter=100, multi_class="auto", verbose=0, warm_start=False, n_jobs=None, l1_ratio=None,):
         """
         Extends [sklearn.linear_model.LogisticRegression.fit()](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html).
+
         Args:
+            target (str): your dataset's target name
             calculate_stats (bool): If true, calculate statistics like standard error during fit, accessible with .summary()
         """
         super().__init__(penalty=penalty, dual=dual, tol=tol, C=C, fit_intercept=fit_intercept, intercept_scaling=intercept_scaling, class_weight=class_weight, random_state=random_state, solver=solver, max_iter=max_iter, multi_class=multi_class, verbose=verbose, warm_start=warm_start, n_jobs=n_jobs, l1_ratio=l1_ratio,)
@@ -442,6 +451,21 @@ class ITLubberLogisticRegression(LogisticRegression):
 class ScoreCard(toad.ScoreCard, TransformerMixin):
     
     def __init__(self, target="target", pdo=60, rate=2, base_odds=35, base_score=750, combiner={}, transer=None, pretrain_lr=None, pipeline=None, **kwargs):
+        """
+        评分卡模型转换
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            pdo: odds 每增加 rate 倍时减少 pdo 分，默认 60
+            rate: 倍率
+            base_odds: 基础 odds，通常根据业务经验设置的基础比率（违约概率/正常概率），估算方法：（1-样本坏客户占比）/坏客户占比，默认 35，即 35:1 => 0.972 => 坏样本率 2.8%
+            base_score: 基础 odds 对应的分数，默认 750
+            combiner: 分箱转换器，传入 pipeline 时可以为None
+            transer: woe转换器，传入 pipeline 时可以为None
+            pretrain_lr: 预训练好的逻辑回归模型，可以不传
+            pipeline: 训练好的 pipeline，必须包含 Combiner 和 WOETransformer
+            **kwargs: 其他相关参数，具体参考 toad.ScoreCard
+        """
         if pipeline:
             combiner = self.class_steps(pipeline, Combiner)[0]
             transer = self.class_steps(pipeline, WOETransformer)[0]

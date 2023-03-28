@@ -128,6 +128,21 @@ def select(frame, target = 'target', empty = 0.9, iv = 0.02, corr = 0.7,
 class FeatureSelection(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", empty=0.95, iv=0.02, corr=0.7, exclude=None, return_drop=True, identical=0.95, remove=None, engine="scorecardpy", target_rm=False):
+        """
+        ITLUBBER提供的特征筛选方法
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            empty: 空值率，默认 0.95, 即空值占比超过 95% 的特征会被剔除
+            iv: IV值，默认 0.02，即iv值小于 0.02 时特征会被剔除
+            corr: 相关性，默认 0.7，即特征之间相关性大于 0.7 时会剔除iv较小的特征
+            identical: 唯一值占比，默认 0.95，即当特征的某个值占比超过 95% 时，特征会被剔除
+            engine: 特征筛选使用的引擎，可选 "toad", "scorecardpy" 两种，默认 scorecardpy
+            remove: 引擎使用 scorecardpy 时，可以传入需要强制删除的变量
+            return_drop: 是否返回删除信息，默认 True，即默认返回删除特征信息
+            target_rm: 是否剔除标签，默认 False，即不剔除
+            exclude: 是否需要强制保留某些特征
+        """
         self.engine = engine
         self.target = target
         self.empty = empty
@@ -181,6 +196,26 @@ class FeatureSelection(TransformerMixin, BaseEstimator):
 class Combiner(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", method='chi', engine="toad", empty_separate=False, min_samples=0.05, min_n_bins=2, max_n_bins=3, max_n_prebins=10, min_prebin_size=0.02, min_bin_size=0.05, max_bin_size=None, gamma=0.01, monotonic_trend="auto_asc_desc", rules={}, n_jobs=1):
+        """
+        特征分箱封装方法
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            method: 特征分箱方法，可选 "chi", "dt", "quantile", "step", "kmeans", "cart", "mdlp", "uniform", 参考 toad.Combiner & optbinning.OptimalBinning
+            engine: 分箱引擎，可选 "optbinning", "toad"
+            empty_separate: 是否空值单独一箱, 默认 False，推荐设置为 True
+            min_samples: 最小叶子结点样本占比，参考对应文档进行设置，默认 5%
+            min_n_bins: 最小分箱数，默认 2，即最小拆分2箱
+            max_n_bins: 最大分像素，默认 3，即最大拆分3箱，推荐设置 3 ～ 5，不宜过多，偶尔使用 optbinning 时不起效
+            max_n_prebins: 使用 optbinning 时预分箱数量
+            min_prebin_size: 使用 optbinning 时预分箱叶子结点（或者每箱）样本占比，默认 2%
+            min_bin_size: 使用 optbinning 正式分箱叶子结点（或者每箱）最小样本占比，默认 5%
+            max_bin_size: 使用 optbinning 正式分箱叶子结点（或者每箱）最大样本占比，默认 None
+            gamma: 使用 optbinning 分箱时限制过拟合的正则化参数，值越大惩罚越多，默认 0。01
+            monotonic_trend: 使用 optbinning 正式分箱时的坏率策略，默认 auto，可选 "auto", "auto_heuristic", "auto_asc_desc", "ascending", "descending", "convex", "concave", "peak", "valley", "peak_heuristic", "valley_heuristic"
+            rules: 自定义分箱规则，toad.Combiner 能够接收的形式
+            n_jobs: 使用多进程加速的worker数量，默认单进程
+        """
         self.combiner = toad.transform.Combiner()
         self.method = method
         self.empty_separate = empty_separate
@@ -321,6 +356,13 @@ class Combiner(TransformerMixin, BaseEstimator):
 class WOETransformer(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", exclude=None):
+        """
+        WOE转换器
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            exclude: 不需要转换 woe 的列
+        """
         self.target = target
         self.exclude = exclude if isinstance(exclude, list) else [exclude] if exclude else []
         self.transformer = toad.transform.WOETransformer()
@@ -359,6 +401,23 @@ class WOETransformer(TransformerMixin, BaseEstimator):
 class StepwiseSelection(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", estimator="ols", direction="both", criterion="aic", max_iter=None, return_drop=True, exclude=None, intercept=True, p_value_enter=0.2, p_remove=0.01, p_enter=0.01, target_rm=False):
+        """
+        逐步回归筛选方法
+
+        Args:
+            target: 数据集中标签名称，默认 target
+            estimator: 预估器，默认 ols，可选 "ols", "lr", "lasso", "ridge"，通常默认即可
+            direction: 逐步回归方向，默认both，可选 "forward", "backward", "both"，通常默认即可
+            criterion: 评价指标，默认 aic，可选 "aic", "bic"，通常默认即可
+            max_iter: 最大迭代次数，sklearn中使用的参数，默认为 None
+            return_drop: 是否返回特征剔除信息，默认 True
+            exclude: 强制保留的某些特征
+            intercept: 是否包含截距，默认为 True
+            p_value_enter: 特征进入的 p 值，用于前向筛选时决定特征是否进入模型
+            p_remove: 特征剔除的 p 值，用于后向剔除时决定特征是否要剔除
+            p_enter: 特征 p 值，用于判断双向逐步回归是否剔除或者准入特征
+            target_rm: 是否剔除数据集中的标签，默认为 False，即剔除数据集中的标签
+        """
         self.target = target
         self.intercept = intercept
         self.p_value_enter = p_value_enter
@@ -400,7 +459,7 @@ if __name__ == "__main__":
     data[target] = data[target].map({"good": 0, "bad": 1})
     
     train, test = train_test_split(data, test_size=0.3, shuffle=True, stratify=data[target])
-    
+
     # selection = FeatureSelection(target=target, engine="toad", return_drop=True, corr=0.9, iv=0.01)
     # train = selection.fit_transform(train)
     
@@ -421,29 +480,29 @@ if __name__ == "__main__":
         ("processing_select", FeatureSelection(target=target, engine="scorecardpy")),
         ("stepwise", StepwiseSelection(target=target, target_rm=False)),
         # ("logistic", StatsLogisticRegression(target=target)),
-        # ("logistic", ITLubberLogisticRegression(target=target)),
+        ("logistic", ITLubberLogisticRegression(target=target)),
     ])
-    
+
     # feature_pipeline.fit(train)
     # y_pred_train = feature_pipeline.predict(train.drop(columns=target))
     # y_pred_test = feature_pipeline.predict(test.drop(columns=target))
 
-    # params_grid = {
-    #     # "logistic__C": [i / 1. for i in range(1, 10, 2)],
-    #     # "logistic__penalty": ["l2"],
-    #     # "logistic__class_weight": [None, "balanced"], # + [{1: i / 10.0, 0: 1 - i / 10.0} for i in range(1, 10)],
-    #     # "logistic__max_iter": [100],
-    #     # "logistic__solver": ["sag"] # ["liblinear", "sag", "lbfgs", "newton-cg"],
-    #     "logistic__intercept": [True, False],
-    # }
+    params_grid = {
+        "logistic__C": [i / 1. for i in range(1, 10, 2)],
+        "logistic__penalty": ["l2"],
+        "logistic__class_weight": [None, "balanced"], # + [{1: i / 10.0, 0: 1 - i / 10.0} for i in range(1, 10)],
+        "logistic__max_iter": [100],
+        "logistic__solver": ["sag"] # ["liblinear", "sag", "lbfgs", "newton-cg"],
+        "logistic__intercept": [True, False],
+    }
     
-    # clf = GridSearchCV(feature_pipeline, params_grid, cv=5, scoring='roc_auc', verbose=-1, n_jobs=2, return_train_score=True)
-    # clf.fit(train, train[target])
+    clf = GridSearchCV(feature_pipeline, params_grid, cv=5, scoring='roc_auc', verbose=-1, n_jobs=2, return_train_score=True)
+    clf.fit(train, train[target])
+
+    y_pred_train = clf.best_estimator_.predict(train)
+    y_pred_test = clf.best_estimator_.predict(test)
     
-    # y_pred_train = clf.best_estimator_.predict(train)
-    # y_pred_test = clf.best_estimator_.predict(test)
-    
-    # print(clf.best_params_)
+    print(clf.best_params_)
     
     # statmodels methods
     # feature_pipeline.named_steps['logistic'].summary_save()
@@ -465,14 +524,14 @@ if __name__ == "__main__":
     
     score_card = ScoreCard(target=target, combiner=combiner, transer=transformer, )
     score_card.fit(woe_train)
-    
-    
+
+
     data["score"] = score_card.transform(data)
     
     print(score_card.KS_bucket(data["score"], data[target]))
     pt = score_card.perf_eva(data["score"], data[target], title="train")
-    
+
     sc = score_card.score_hist(data["score"], data[target])
-    
+
     print(score_card.KS(data["score"], data[target]), score_card.AUC(data["score"], data[target]))
     
