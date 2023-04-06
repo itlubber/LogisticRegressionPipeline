@@ -133,3 +133,4 @@ dmypy.json
 catboost_info/
 test.py
 .idea
+.vscode
