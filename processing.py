@@ -193,6 +193,82 @@ class FeatureSelection(TransformerMixin, BaseEstimator):
         return x[[col for col in self.select_columns if col in x.columns]]
     
     
+class FeatureImportanceSelector(BaseEstimator, TransformerMixin):
+    
+    def __init__(self, top_k=126, target="target", selector="catboost", params=None, max_iv=None):
+        """
+        基于特征重要性的特征筛选方法
+        
+        Args:
+            target: 数据集中标签名称，默认 target
+            top_k: 依据特征重要性进行排序，筛选最重要的 top_k 个特征
+            max_iv: 是否需要删除 IV 过高的特征，建议设置为 1.0
+            selector: 特征选择器，目前只支持 catboost ，可以支持数据集中包含字符串的数据
+            params: selector 的参数，不传使用默认参数
+        """
+        self.target = target
+        self.top_k = top_k
+        self.max_iv = max_iv
+        self.selector = selector
+        self.params = params
+        self.feature_names_ = None
+        self.high_iv_feature_names_ = None
+        self.low_importance_feature_names_ = None
+        self.select_columns = None
+        self.dropped = None
+    
+    def fit(self, x, y=None):
+        x = x.copy()
+        
+        if self.max_iv is not None:
+            self.high_iv_feature_names_ = list(toad.quality(train, target=target, cpu_cores=-1, iv_only=True).query("iv > 1.0").index)
+            x = x[[c for c in x.columns if c not in self.high_iv_feature_names_]]
+        
+        X = x.drop(columns=self.target)
+        Y = x[self.target]
+        
+        self.feature_names_ = list(X.columns)
+        cat_features_index = [i for i in range(len(self.feature_names_)) if self.feature_names_[i] not in X.select_dtypes("number").columns]
+        
+        if self.selector == "catboost":
+            self.catboost_selector(x=X, y=Y, cat_features=cat_features_index)
+        else:
+            pass
+        
+        return self
+        
+    def transform(self, x, y=None):
+        return x[self.select_columns + [self.target]]
+        
+        
+    def catboost_selector(self, x, y, cat_features=None):
+        from catboost import Pool, cv, metrics, CatBoostClassifier
+        
+        cat_data = Pool(data=x, label=y, cat_features=cat_features)
+        
+        if self.params is None:
+            self.params = {
+                "iterations": 256,
+                "objective": "CrossEntropy",
+                "eval_metric": "AUC",
+                "learning_rate": 1e-2,
+                "colsample_bylevel": 0.1,
+                "depth": 4,
+                "boosting_type": "Ordered",
+                "bootstrap_type": "Bernoulli",
+                "subsample": 0.8,
+                "random_seed": 1024,
+                "early_stopping_rounds": 10,
+                "verbose": 0,
+            }
+        
+        cat_model = CatBoostClassifier(**self.params)
+        cat_model.fit(cat_data, eval_set=[cat_data])
+        
+        self.select_columns = [name for score, name in sorted(zip(cat_model.feature_importances_, cat_model.feature_names_), reverse=True)][:self.top_k]
+        self.low_importance_feature_names_ = [c for c in x.columns if c not in self.select_columns]
+    
+    
 class Combiner(TransformerMixin, BaseEstimator):
     
     def __init__(self, target="target", method='chi', engine="toad", empty_separate=False, min_samples=0.05, min_n_bins=2, max_n_bins=3, max_n_prebins=10, min_prebin_size=0.02, min_bin_size=0.05, max_bin_size=None, gamma=0.01, monotonic_trend="auto_asc_desc", rules={}, n_jobs=1):
