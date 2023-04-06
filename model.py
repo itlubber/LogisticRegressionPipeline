@@ -908,7 +908,7 @@ if __name__ == '__main__':
     
     writer.close()
     
-    from utils import render_excel
+    from utils.tools import render_excel
     
     render_excel("outputs/评分卡结果验证表.xlsx", border=False)
     
