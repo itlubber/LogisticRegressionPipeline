@@ -87,7 +87,7 @@ class ExcelWriter:
                 for c in cell:
                     c.number_format = _format
             else:
-                c.number_format = _format
+                cell.number_format = _format
 
     def get_sheet_by_name(self, name):
         """
