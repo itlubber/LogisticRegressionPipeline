@@ -5,6 +5,7 @@
 @Site    : itlubber.art
 """
 
+import re
 import os
 import toad
 import scipy
@@ -22,6 +23,7 @@ from openpyxl import load_workbook
 from concurrent.futures import ProcessPoolExecutor
 from openpyxl.styles import Alignment
 from optbinning import OptimalBinning
+from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.utils.validation import check_is_fitted
@@ -267,6 +269,58 @@ class FeatureImportanceSelector(BaseEstimator, TransformerMixin):
         
         self.select_columns = [name for score, name in sorted(zip(cat_model.feature_importances_, cat_model.feature_names_), reverse=True)][:self.top_k]
         self.low_importance_feature_names_ = [c for c in x.columns if c not in self.select_columns]
+
+
+class FeatureDecomposition(BaseEstimator, TransformerMixin):
+
+    def __init__(self, freq, app, key_words=None, combin_features=None, combiner=PCA, n_components=1):
+        """
+        同一类型 + 同一周期 + 新增数/安装数/活跃天数/卸载数 的特征通过降维方法转换为 n_components 个特征
+
+        freq: 周期，例如 90天
+        app: 类型，例如 银行类
+        key_words: 不同类型的指标，例如 ["活跃款数", "新增款数", "活跃频次", "活跃天数"]
+        combin_features: 手工制定需要进行降维的特征，传入app、freq、freq时不需要传入
+        combiner: 降维的方法，默认 PCA，参考 sklearn.decomposition 中相关方法的使用
+        n_components: 降维后的特征数量，默认 1
+        """
+        self.freq = freq
+        self.app = app
+        self.key_words = key_words
+        self.combin_features = combin_features
+        self.n_components = n_components
+        self.combiner = combiner(n_components=self.n_components)
+
+    def fit(self, x, y=None):
+        x = x.copy()
+
+        if self.combin_features:
+            self.combin_features = [c for c in self.combin_features if c in x.columns]
+        else:
+            if self.key_words:
+                if isinstance(self.key_words, str):
+                    self.key_words = [self.key_words]
+                pattern = re.compile(f"(?=.*{self.freq})(?=.*{self.app})(?=.*(?:{'|'.join(self.key_words)})).+")
+            else:
+                pattern = re.compile(f"{self.app}")
+
+            self.combin_features = [c for c in x.columns if pattern.match(c)]
+
+        if len(self.combin_features) > 0 and len(self.combin_features) > self.n_components:
+            x = x[self.combin_features]
+            self.combiner.fit(x, y=y)
+
+        else:
+            raise Exception("组合特征不在数据中。")
+
+        return self
+
+    def transform(self, x, y=None):
+        x = x[self.combin_features].copy()
+        return self.combiner.transform(x)
+
+    def inverse_transform(self, x, y=None):
+        return self.combiner.inverse_transform(x)
     
     
 class Combiner(TransformerMixin, BaseEstimator):
