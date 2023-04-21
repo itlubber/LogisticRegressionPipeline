@@ -24,10 +24,23 @@ from openpyxl.formatting.rule import DataBarRule
 from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
 
 
-warnings.filterwarnings("ignore")
-pd.set_option('display.width', 5000)
-plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
-plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
+def init_setting(font_path="./utils/杨任东竹石体-Medium.ttf"):
+    import warnings
+    import matplotlib
+    from matplotlib import font_manager
+    warnings.filterwarnings("ignore")
+    pd.options.display.float_format = '{:.4f}'.format
+    pd.set_option('display.max_colwidth', 300)
+    plt.style.use('seaborn-ticks')
+    matplotlib.font_manager.fontManager.addfont(font_path)
+    matplotlib.rcParams['font.family'] = font_manager.FontProperties(fname=font_path).get_name()
+    matplotlib.rcParams['axes.unicode_minus'] = False
+    
+    
+# warnings.filterwarnings("ignore")
+# pd.set_option('display.width', 5000)
+# plt.rcParams["font.sans-serif"]=["SimHei"] #设置字体
+# plt.rcParams["axes.unicode_minus"]=False #该语句解决图像中的“-”负号的乱码问题
 
 
 try:
@@ -187,6 +200,52 @@ def plot_bin(binx, title="", show_iv=True, show_na=True, colors=["#2639E9", "#a2
     plt.xticks(ind, binx['分箱'], fontsize=12)
     plt.title(title_string, loc='center')
     plt.legend((p2[0], p1[0]), ('好样本', '坏样本'), loc='upper right')
+    
+
+# def bin_plot(feature_table, feature="", desc="", figsize=(8, 6), colors=['#8E8BFE', '#FEA3A2', '#9394E7'], max_len=35, save=None):
+#     feature_table = feature_table.copy()
+# 
+#     feature_table["分箱"] = feature_table["分箱"].apply(lambda x: x if re.match("^\[.*\)$", x) else str(x)[:max_len] + "..")
+# 
+#     # 绘制好坏样本分布情况
+#     fig, ax1 = plt.subplots(figsize=figsize)
+#     ax1.barh(feature_table['分箱'], feature_table['好样本数'], color=colors[0], label='好样本')
+#     ax1.barh(feature_table['分箱'], feature_table['坏样本数'], left=feature_table['好样本数'], color=colors[1], label='坏样本')
+#     ax1.set_xlabel('样本数')
+# 
+#     # 绘制坏样本率的分布情况
+#     ax2 = ax1.twiny()
+#     ax2.plot(feature_table['坏样本率'], feature_table['分箱'], colors[2], label='坏样本率', linestyle='-.')
+#     ax2.set_xlabel('坏样本率: 坏样本数 / 样本总数')
+# 
+#     for i, rate in enumerate(feature_table['坏样本率']):
+#         ax2.scatter(rate, i, color=colors[2], s=3)
+# 
+#     # 在图像对应位置显示样本总数和坏样本率
+#     for i, v in feature_table[['样本总数', '好样本数', '坏样本数', '坏样本率', '样本占比']].iterrows():
+#         ax1.text(v['样本总数'] / 2, i + len(feature_table) / 60, f"{int(v['好样本数'])}:{int(v['坏样本数'])}:{v['样本占比']:.1%}:{v['坏样本率']:.1%}")
+# 
+#     # 逆转y轴顺序
+#     ax1.invert_yaxis()
+#     
+#     desc = desc if desc else feature
+# 
+#     # 添加一个标题
+#     fig.suptitle(f'变量 {desc} 分箱图\n\n')
+# 
+#     # 合并图例
+#     handles1, labels1 = ax1.get_legend_handles_labels()
+#     handles2, labels2 = ax2.get_legend_handles_labels()
+#     fig.legend(handles1 + handles2, labels1 + labels2, loc='upper center', ncol=len(labels1 + labels2), bbox_to_anchor=(0.5, 0.95), frameon=False)
+# 
+#     # 调整布局，使分箱信息能够完全显示
+#     plt.tight_layout()
+# 
+#     if save:
+#         if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+#             os.makedirs(os.path.dirname(save))
+# 
+#         fig.savefig(save, dpi=240, format="png", bbox_inches="tight")
     
     
 def cal_psi(train, test, feature, combiner=None):
