@@ -508,7 +508,18 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return self.predict(x)
     
     def scorecard_scale(self):
-        pass
+        scorecard_kedu = pd.DataFrame(
+            [
+                ["base_odds", self.base_odds, "根据业务经验设置的基础比率（违约概率/正常概率），估算方法：（1-样本坏客户占比）/坏客户占比"],
+                ["base_score", self.base_score, "基础ODDS对应的分数"],
+                ["rate", self.rate, "设置分数的倍率"],
+                ["pdo", self.pdo, "表示分数增长PDO时，ODDS值增长到RATE倍"],
+                ["B", self.offset, "补偿值，计算方式：pdo / ln(rate)"],
+                ["A", self.factor, "刻度，计算方式：base_score - B * ln(base_odds)"],
+            ],
+            columns=["刻度项", "刻度值", "备注"],
+        )
+        return scorecard_kedu
     
     @staticmethod
     def KS_bucket(y_pred, y_true, bucket=10, method="quantile"):
