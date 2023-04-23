@@ -507,6 +507,9 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
     def transform(self, x):
         return self.predict(x)
     
+    def scorecard_scale(self):
+        pass
+    
     @staticmethod
     def KS_bucket(y_pred, y_true, bucket=10, method="quantile"):
         return toad.metrics.KS_bucket(y_pred, y_true, bucket=bucket, method=method)
