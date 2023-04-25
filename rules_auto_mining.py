@@ -29,6 +29,7 @@ class ParseDecisionTreeRules:
         self.dt_rules = pd.DataFrame()
         self.end_row = 2
         self.start_col = 2
+        self.describe_columns = ["组合策略", "命中数", "命中率", "好样本数", "好样本占比", "坏样本数", "坏样本占比", "坏率", "样本整体坏率", "LIFT值"]
         
         if output:
             from utils.excel_writer import ExcelWriter
@@ -62,8 +63,7 @@ class ParseDecisionTreeRules:
         else:
             return X
     
-    @staticmethod
-    def get_dt_rules(tree, feature_names, total_bad_rate, total_count):
+    def get_dt_rules(self, tree, feature_names, total_bad_rate, total_count):
         tree_ = tree.tree_
         left = tree.tree_.children_left
         right = tree.tree_.children_right
@@ -111,10 +111,9 @@ class ParseDecisionTreeRules:
 
         recurse(0, 1, 0)
 
-        return res_df.sort_values("LIFT值", ascending=True).reset_index(drop=True)
+        return res_df.sort_values("LIFT值", ascending=True)[self.describe_columns].reset_index(drop=True)
     
-    @staticmethod
-    def select_dt_rules(decision_tree, x, y, lift=3., max_samples=0.05, labels=["positive", "negative"], save=None, verbose=False, drop=False):
+    def select_dt_rules(self, decision_tree, x, y, lift=3., max_samples=0.05, labels=["positive", "negative"], save=None, verbose=False, drop=False):
         rules = self.get_dt_rules(decision_tree, x.columns, sum(y) / len(y), len(y))
         viz_model = dtreeviz.model(decision_tree,
                                    X_train=x, 
@@ -141,7 +140,10 @@ class ParseDecisionTreeRules:
                                                 label_fontsize=10,
                                             )
             if verbose:
-                display(rules)
+                if self.feature_map is not None and len(self.feature_map) > 0:
+                    display(rules.replace(self.feature_map, regex=True))
+                else:
+                    display(rules)
                 display(decision_tree_viz)
             if save:
                 if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
@@ -155,8 +157,7 @@ class ParseDecisionTreeRules:
         else:
             return rules
     
-    @staticmethod
-    def query_dt_rules(x, y, parsed_rules=None):
+    def query_dt_rules(self, x, y, parsed_rules=None):
         total_count = len(y)
         total_bad_rate = y.sum() / len(y)
 
@@ -181,7 +182,7 @@ class ParseDecisionTreeRules:
 
             rules = pd.concat([rules, pd.DataFrame(df).T]).reset_index(drop=True)
 
-        return rules
+        return rules[self.describe_columns]
     
     def insert_dt_rules(self, parsed_rules, end_row, start_col, save=None):
         end_row, end_col = self.writer.insert_df2sheet(self.worksheet, parsed_rules, (end_row + 2, start_col))
@@ -209,20 +210,24 @@ class ParseDecisionTreeRules:
             decision_tree = DecisionTreeClassifier(max_depth=max_depth, **kwargs)
             decision_tree = decision_tree.fit(X_TE, y)
             
-            if min_score is not None and decision_tree.score(X_TE, y) < min_score:
+            if (min_score is not None and decision_tree.score(X_TE, y) < min_score) or len(X_TE.columns) < max_depth:
                 break
             
-            parsed_rules, remove = self.select_dt_rules(decision_tree, X_TE, y, lift=lift, max_samples=max_samples, labels=self.labels, verbose=verbose, save=f"model_report/auto_mining_rules/combiner_rules_{i}.png", drop=True)
-            
-            if len(parsed_rules) > 0:
-                self.dt_rules = pd.concat([self.dt_rules, parsed_rules]).reset_index(drop=True)
-                
-                if self.writer is not None:
-                    parsed_rules["组合策略"] = parsed_rules["组合策略"].replace(self.feature_map, regex=True)
-                    self.end_row, _ = self.insert_dt_rules(parsed_rules, self.end_row, self.start_col, save=f"model_report/auto_mining_rules/combiner_rules_{i}.png")
-                    
-            X_TE = X_TE.drop(columns=remove)
-            self.decision_trees.append(decision_tree)
+            try:
+                parsed_rules, remove = self.select_dt_rules(decision_tree, X_TE, y, lift=lift, max_samples=max_samples, labels=self.labels, verbose=verbose, save=f"model_report/auto_mining_rules/combiner_rules_{i}.png", drop=True)
+
+                if len(parsed_rules) > 0:
+                    self.dt_rules = pd.concat([self.dt_rules, parsed_rules]).reset_index(drop=True)
+
+                    if self.writer is not None:
+                        if self.feature_map is not None and len(self.feature_map) > 0:
+                            parsed_rules["组合策略"] = parsed_rules["组合策略"].replace(self.feature_map, regex=True)
+                        self.end_row, _ = self.insert_dt_rules(parsed_rules, self.end_row, self.start_col, save=f"model_report/auto_mining_rules/combiner_rules_{i}.png")
+
+                X_TE = X_TE.drop(columns=remove)
+                self.decision_trees.append(decision_tree)
+            except:
+                pass
         
         return self
     
@@ -231,12 +236,14 @@ class ParseDecisionTreeRules:
         X_TE = self.encode_cat_features(x.drop(columns=[self.target]), y)
         X_TE = X_TE.fillna(self.nan)
         parsed_rules = self.query_dt_rules(X_TE, y, parsed_rules=self.dt_rules)
-        parsed_rules["组合策略"] = parsed_rules["组合策略"].replace(self.feature_map, regex=True)
+        if self.feature_map is not None and len(self.feature_map) > 0:
+            parsed_rules["组合策略"] = parsed_rules["组合策略"].replace(self.feature_map, regex=True)
         return parsed_rules
     
     def insert_all_rules(self, val=None, test=None):
         parsed_rules_train = self.dt_rules.copy()
-        parsed_rules_train["组合策略"] = parsed_rules_train["组合策略"].replace(self.feature_map, regex=True)
+        if self.feature_map is not None and len(self.feature_map) > 0:
+            parsed_rules_train["组合策略"] = parsed_rules_train["组合策略"].replace(self.feature_map, regex=True)
         self.end_row, _ = self.writer.insert_value2sheet(self.worksheet, (self.end_row + 2, self.start_col), value="训练集决策树组合策略")
         self.end_row, _ = self.insert_dt_rules(parsed_rules_train, self.end_row, self.start_col)
         
