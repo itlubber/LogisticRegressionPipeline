@@ -690,7 +690,13 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         return [v for k, v in pipeline.named_steps.items() if isinstance(v, query)]
     
     @staticmethod
-    def feature_bins(bins):
+    def round_float(num, decimal = 4):
+        if ~pd.isnull(num) and isinstance(num, float):
+            return float(str(num).split(".")[0] + "." + str(num).split(".")[1][:decimal])
+        else:
+            return num
+    
+    def feature_bins(self, bins, decimal = 4):
         if isinstance(bins, list): bins = np.array(bins)
         EMPTYBINS = len(bins) if not isinstance(bins[0], (set, list, np.ndarray)) else -1
         
@@ -698,7 +704,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         if np.issubdtype(bins.dtype, np.number):
             has_empty = len(bins) > 0 and np.isnan(bins[-1])
             if has_empty: bins = bins[:-1]
-            sp_l = ["负无穷"] + bins.tolist() + ["正无穷"]
+            sp_l = ["负无穷"] + [round_float(b, decimal=decimal) for b in bins.tolist()] + ["正无穷"]
             for i in range(len(sp_l) - 1): l.append('['+str(sp_l[i])+' , '+str(sp_l[i+1])+')')
             if has_empty: l.append('缺失值')
         else:
@@ -730,7 +736,10 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
                 if _combiner.status == "OPTIMAL":
                     rules.update({feature: [s.tolist() if isinstance(s, np.ndarray) else s for s in _combiner.splits] + [np.nan]})
             else:
-                combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins, clip_v=clip_v)
+                if method == "step":
+                    combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins, clip_v=clip_v)
+                else:
+                    combiner.fit(data[[feature, target]], target, empty_separate=empty_separate, method=method, n_bins=max_n_bins)
 
             if verbose > 0:
                 print(data[feature].describe())
@@ -781,6 +790,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
             table["分档KS值"] = table["累积坏样本数"] / table['坏样本数'].sum() - table["累积好样本数"] / table['好样本数'].sum()
         
         table["分箱"] = table["分箱"].map(feature_bin_dict)
+        table = table.set_index(['指标名称', '指标含义', '分箱']).reindex([(feature, desc, b) for b in feature_bin_dict.values()]).fillna(0).reset_index()
         
         if ks:
             return table[['指标名称', "指标含义", '分箱', '样本总数', '样本占比', '好样本数', '好样本占比', '坏样本数', '坏样本占比', '坏样本率', '分档WOE值', '分档IV值', '指标IV值', 'LIFT值', '累积LIFT值', '累积好样本数', '累积坏样本数', '分档KS值']]
