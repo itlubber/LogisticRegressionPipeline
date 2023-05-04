@@ -33,7 +33,7 @@ def pyplot_chinese(font_path='utils/matplot_chinese.ttf'):
     matplotlib.rcParams['axes.unicode_minus']=False
 
 
-pyplot_chinese(font_path='utils/杨任东竹石体-Medium.ttf')
+pyplot_chinese()
 
 
 target = "creditability"

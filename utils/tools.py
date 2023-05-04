@@ -24,7 +24,7 @@ from openpyxl.formatting.rule import DataBarRule
 from openpyxl.styles import Border, Side, Alignment, PatternFill, Font
 
 
-def init_setting(font_path="./utils/杨任东竹石体-Medium.ttf"):
+def init_setting(font_path="./utils/matplot_chinese.ttf"):
     import warnings
     import matplotlib
     from matplotlib import font_manager
