@@ -6,6 +6,7 @@
 """
 
 import os
+import six
 import toad
 import joblib
 import warnings
@@ -395,6 +396,46 @@ def run_feature_table(feature, train=None, feature_dict=None, rules={}, combiner
         return feature, table
     else:
         return table
+    
+    
+def render_dataframe(df, row_height=0.4, font_size=14,
+                     header_color='#2639E9', row_colors=['#dae3f3', 'w'], edge_color='w',
+                     bbox=[0, 0, 1, 1], header_columns=0,
+                     ax=None, save=None, **kwargs):
+    data = df.copy()
+    for col in data.select_dtypes('datetime'):
+        data[col] = data[col].dt.strftime("%Y-%m-%d")
+
+    for col in data.select_dtypes('float'):
+        data[col] = data[col].apply(lambda x: np.nan if pd.isnull(x) else round(x, 4))
+
+    cols_width = [max(data[col].apply(lambda x:len(str(x).encode())).max(), len(str(col).encode())) / 8. for col in data.columns]
+
+    if ax is None:
+        size = (sum(cols_width), (len(data) + 1) * row_height)
+        fig, ax = plt.subplots(figsize=size)
+        ax.axis('off')
+
+    mpl_table = ax.table(cellText=data.values, colWidths=cols_width, bbox=bbox, colLabels=data.columns, **kwargs)
+
+    mpl_table.auto_set_font_size(False)
+    mpl_table.set_fontsize(font_size)
+
+    for k, cell in  six.iteritems(mpl_table._cells):
+        cell.set_edgecolor(edge_color)
+        if k[0] == 0 or k[1] < header_columns:
+            cell.set_text_props(weight='bold', color='w')
+            cell.set_facecolor(header_color)
+        else:
+            cell.set_facecolor(row_colors[k[0]%len(row_colors)])
+
+    if save:
+        if os.path.dirname(save) and not os.path.exists(os.path.dirname(save)):
+            os.makedirs(os.path.dirname(save))
+
+        fig.savefig(save, dpi=240, format="png", bbox_inches="tight")
+
+    return fig
 
 
 if __name__ == '__main__':
