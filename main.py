@@ -101,17 +101,22 @@ test["score"] = card.predict(test)
 oot["score"] = card.predict(oot)
 
 
-def sample_distribution(df, date="date", target="target", user_count="count", save="model_report/sample_time_count.png", figsize=(10, 6)):
-    temp = df.groupby([df[date].dt.strftime("%Y-%m"), df[target].map({0: "好样本", 1: "坏样本"})])[user_count].sum().unstack()
+def sample_distribution(df, date="date", target="target", user_count="count", save="model_report/sample_time_count.png", figsize=(10, 6), colors=["#2639E9", "#F76E6C", "#FE7715"]):
+    temp = df.set_index(date).assign(
+        好样本=lambda x: (x[target] == 0).astype(int),
+        坏样本=lambda x: (x[target] == 1).astype(int),
+    ).resample("W").agg({"好样本": sum, "坏样本": sum})
+    temp.index = [i.strftime("%Y-%m-%d") for i in temp.index]
+
     fig, ax1 = plt.subplots(1, 1, figsize=figsize)
-    temp.plot(kind='bar', stacked=True, ax=ax1, color=["#8E8BFE", "#FEA3A2"], hatch="/", legend=False)
+    temp.plot(kind='bar', stacked=True, ax=ax1, color=colors[:2], hatch="/", legend=False)
     ax1.tick_params(axis='x', labelrotation=-90)
     ax1.set(xlabel=None)
     ax1.set_ylabel('样本数')
     ax1.set_title('不同时点数据集样本分布情况\n\n')
 
     ax2 = plt.twinx()
-    (temp["坏样本"] / temp.sum(axis=1)).plot(ax=ax2, color="#9394E7", marker=".", linewidth=2, label="坏样本率")
+    (temp["坏样本"] / temp.sum(axis=1)).plot(ax=ax2, color=colors[-1], marker=".", linewidth=2, label="坏样本率")
     # sns.despine()
 
     # 合并图例
@@ -129,7 +134,7 @@ def sample_distribution(df, date="date", target="target", user_count="count", sa
 
         fig.savefig(save, dpi=240, format="png", bbox_inches="tight")
 
-    temp = temp.reset_index().rename(columns={"date": "日期", 0: "好样本", 1: "坏样本"})
+    temp = temp.reset_index().rename(columns={date: "日期", "index": "日期", 0: "好样本", 1: "坏样本"})
     temp["样本总数"] = temp["坏样本"] + temp["好样本"]
     temp["样本占比"] = temp["样本总数"] / temp["样本总数"].sum()
     temp["好样本占比"] = temp["好样本"] / temp["好样本"].sum()
