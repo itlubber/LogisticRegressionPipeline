@@ -59,15 +59,22 @@ def ks_score(y, y_pred):
 ks_score = make_scorer(ks_score, needs_proba=True)
 
 
-def format_bins(bins):
+def round_float(num):
+    if ~pd.isnull(num) and isinstance(num, float):
+        return float(str(num).split(".")[0] + "." + str(num).split(".")[1][:4])
+    else:
+        return num
+
+
+def feature_bins(bins):
     if isinstance(bins, list): bins = np.array(bins)
     EMPTYBINS = len(bins) if not isinstance(bins[0], (set, list, np.ndarray)) else -1
-    
+
     l = []
     if np.issubdtype(bins.dtype, np.number):
         has_empty = len(bins) > 0 and np.isnan(bins[-1])
         if has_empty: bins = bins[:-1]
-        sp_l = ["负无穷"] + bins.tolist() + ["正无穷"]
+        sp_l = ["负无穷"] + [round_float(b) for b in bins.tolist()] + ["正无穷"]
         for i in range(len(sp_l) - 1): l.append('['+str(sp_l[i])+' , '+str(sp_l[i+1])+')')
         if has_empty: l.append('缺失值')
     else:
