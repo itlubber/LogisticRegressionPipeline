@@ -173,8 +173,8 @@ class FeatureSelection(TransformerMixin, BaseEstimator):
         else:
             self.select_columns = list(selected.columns)
         
-        if self.target_rm and target in self.select_columns:
-            self.select_columns.remove(target)
+        if self.target_rm and self.target in self.select_columns:
+            self.select_columns.remove(self.target)
             
         return self
         
