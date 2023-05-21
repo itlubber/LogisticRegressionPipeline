@@ -1,5 +1,26 @@
 # 可用于 `超参数搜索` & `pipeline` 的逻辑回归
 
+## 交流
+
+<table style="text-align:center !important;border=0;">
+    <tr>
+        <td>
+            <span>微信: itlubber</span>
+        </td>
+        <td>
+            <span>微信公众号: itlubber_art</span>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <img src="https://itlubber.art//upload/itlubber.png" alt="itlubber.png" width="50%" border=0/>
+        </td>
+        <td>
+            <img src="https://itlubber.art//upload/itlubber_art.png" alt="itlubber_art.png" width="50%" border=0/>
+        </td>
+    </tr>
+</table>
+
 ## 概述
 
 分别基于 `statsmodels` 和 `scikit-learn` 实现两种可用于 `sklearn pipeline` 的 `LogisticRegression`，并输出相应的报告，效果如下：
