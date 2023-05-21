@@ -704,7 +704,7 @@ class ScoreCard(toad.ScoreCard, TransformerMixin):
         if np.issubdtype(bins.dtype, np.number):
             has_empty = len(bins) > 0 and np.isnan(bins[-1])
             if has_empty: bins = bins[:-1]
-            sp_l = ["负无穷"] + [round_float(b, decimal=decimal) for b in bins.tolist()] + ["正无穷"]
+            sp_l = ["负无穷"] + [self.round_float(b, decimal=decimal) for b in bins.tolist()] + ["正无穷"]
             for i in range(len(sp_l) - 1): l.append('['+str(sp_l[i])+' , '+str(sp_l[i+1])+')')
             if has_empty: l.append('缺失值')
         else:
